@@ -10,3 +10,11 @@ statsmodels
 numpy
 pmdarima
 matplotlib
+streamlit
+yfinance
+matplotlib
+statsmodels
+pmdarima
+ta
+pandas
+numpy
