@@ -7,7 +7,7 @@ from sklearn.linear_model import LinearRegression
 import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="تحليل اصــــــــــــالة العملات والمشاعر", layout="wide")
-st.title("📊 تحليل العملات مقابل المشاعر وتوقع الأسعار")
+st.title("📊 تحليل العملات اصــــــــــــالة  مقابل المشاعر وتوقع الأسعار")
 
 # قائمة العملات
 tickers = ["BTC-USD", "ETH-USD", "BNB-USD", "ADA-USD", "SOL-USD", "XRP-USD", "DOGE-USD", "AVAX-USD", "MATIC-USD", "GALA-USD", "أخرى..."]
