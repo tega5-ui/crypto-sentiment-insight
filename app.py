@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 st.set_page_config(page_title="تحليل العملات والمشاعر", layout="wide")
 st.title("📊 تحليل سعر العملة مقابل مشاعر الأخبار")
 
-# عملات شائعة
+# قائمة بالعملات الشائعة
 st.markdown("### 🪙 اختر عملة أو اكتب رمزًا يدويًا")
 popular_tickers = [
     "BTC-USD", "ETH-USD", "BNB-USD", "ADA-USD",
@@ -22,18 +22,19 @@ if selected == "أخرى...":
 else:
     ticker = selected
 
+# تحديد الفترة الزمنية
 start = st.date_input("📅 البداية", pd.to_datetime("2024-01-01"))
 end = st.date_input("📅 النهاية", pd.to_datetime("2025-07-01"))
 
 if ticker and st.button("🚀 شغّل التحليل"):
     try:
-        # تحميل الأسعار
-        data = yf.download(ticker, start=start, end=end)[['Close']]
-        data = data.reset_index()
-        data = data.rename(columns={'Close': 'price'})
-        data['Date'] = pd.to_datetime(data['Date'])
+        # تحميل بيانات الأسعار وتنسيق التاريخ
+        price_data = yf.download(ticker, start=start, end=end)[['Close']].copy()
+        price_data.reset_index(inplace=True)
+        price_data.rename(columns={'Close': 'price'}, inplace=True)
+        price_data['Date'] = pd.to_datetime(price_data['Date'])
 
-        # جلب الأخبار
+        # جلب أخبار Google News
         def fetch_google_news_rss(query):
             url = f"https://news.google.com/rss/search?q={query.replace(' ', '+')}&hl=en-US&gl=US&ceid=US:en"
             feed = feedparser.parse(url)
@@ -54,32 +55,17 @@ if ticker and st.button("🚀 شغّل التحليل"):
         news_df = fetch_google_news_rss(news_query)
         news_df['sentiment_score'] = news_df['description'].apply(analyze_sentiment)
         news_df['Date'] = pd.to_datetime(news_df['date'])
+
+        # حساب متوسط المشاعر يوميًا
         daily_sentiment = news_df.groupby('Date')['sentiment_score'].mean().reset_index()
 
-        # دمج البيانات
-        merged = pd.merge(data, daily_sentiment, on='Date', how='left')
+        # التأكد من أن 'Date' عمود عادي في كلا الجدولين
+        if 'Date' not in price_data.columns:
+            price_data.reset_index(inplace=True)
+        if 'Date' not in daily_sentiment.columns:
+            daily_sentiment.reset_index(inplace=True)
+
+        # الدمج
+        merged = pd.merge(price_data, daily_sentiment, on='Date', how='left')
         merged['sentiment_score'].fillna(0, inplace=True)
-        merged['lagged_sentiment'] = merged['sentiment_score'].shift(1)
-        merged.dropna(inplace=True)
-
-        # نموذج التنبؤ
-        model = LinearRegression()
-        model.fit(merged[['lagged_sentiment']], merged['price'])
-        merged['predicted_price'] = model.predict(merged[['lagged_sentiment']])
-
-        # رسم بياني
-        st.subheader("📈 السعر الفعلي مقابل المتوقع")
-        fig, ax = plt.subplots(figsize=(12, 5))
-        ax.plot(merged['Date'], merged['price'], label="السعر الفعلي", color='blue')
-        ax.plot(merged['Date'], merged['predicted_price'], label="السعر المتوقع", color='green')
-        ax.set_xlabel("التاريخ")
-        ax.set_ylabel("السعر")
-        ax.legend()
-        st.pyplot(fig)
-
-        # الارتباط
-        correlation = merged['price'].corr(merged['sentiment_score'])
-        st.success(f"💡 معامل الارتباط بين السعر والمشاعر: {correlation:.3f}")
-
-    except Exception as e:
-        st.error(f"حدث خطأ أثناء التحليل: {str(e)}", icon="🚨")
+        merged['lagged_sentiment'] = merged['sentiment_score'].
