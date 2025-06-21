@@ -41,6 +41,21 @@ if st.button("🚀 تشغيل التحليل الفني"):
         lower_bound = last_price * 0.85
         upper_bound = last_price * 1.15
         clipped_forecast = raw_forecast.clip(lower=lower_bound, upper=upper_bound)
+        # ضبط الحدود
+clipped_forecast = raw_forecast.clip(lower=lower_bound, upper=upper_bound)
+
+# ✅ هنا نضيف الكود لتسوية الأبعاد
+if hasattr(clipped_forecast, 'values'):
+    clipped_forecast = clipped_forecast.values
+if clipped_forecast.ndim > 1:
+    clipped_forecast = clipped_forecast.flatten()
+
+# بعدها ننشئ جدول التوقع
+forecast_df = pd.DataFrame({
+    'التاريخ': forecast_dates,
+    'السعر المتوقع': clipped_forecast.round(2),
+    'الحالة': clipped_forecast > last_price
+})
 
         # عرض السعر الوسطي للمقارنة
         ema_now = df['EMA_7'].iloc[-1]
