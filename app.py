@@ -8,11 +8,7 @@ Original file is located at
 """
 
 from textblob import TextBlob
-!pip install feedparser
 import feedparser
-
-!pip install feedparser
-
 import yfinance as yf
 import pandas as pd
 import matplotlib.pyplot as plt
