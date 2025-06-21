@@ -40,7 +40,7 @@ if st.button("🚀 شغّل التحليل"):
         upper_bound = last_price * 1.15
         clipped_forecast = raw_forecast.clip(lower=lower_bound, upper=upper_bound)
 
-        # ✅ تحويل إلى 1D باستخدام squeeze
+        # تحويل إلى 1D باستخدام squeeze
         clipped_array = np.squeeze(clipped_forecast)
 
         # بناء جدول التوقع
@@ -75,6 +75,19 @@ if st.button("🚀 شغّل التحليل"):
         # عرض المؤشرات الأخيرة
         st.subheader("📊 تقييم آخر المؤشرات")
         latest = df.dropna().iloc[-1]
+        rsi_value = latest['RSI']
+        if rsi_value > 70:
+            rsi_status = "📈 تشبع شراء"
+        elif rsi_value < 30:
+            rsi_status = "📉 تشبع بيع"
+        else:
+            rsi_status = "⚖️ حيادي"
+
         st.markdown(f"""
         - السعر الحالي: **${latest['price']:.2f}**
-        - RSI: **{latest['RSI']:.2f}** → {"📈 تشبع شراء" if latest['RSI'] > 70 else "📉 تشبع بيع" if
+        - RSI: **{rsi_value:.2f}** → {rsi_status}
+        - نطاق Bollinger: **{latest['bb_lower']:.2f} ~ {latest['bb_upper']:.2f}**
+        """)
+
+    except Exception as e:
+        st.error(f"⚠️ حدث خطأ أثناء التحليل:\n\n{str(e)}")
