@@ -29,20 +29,21 @@ if st.button("🚀 شغّل التحليل"):
         df['bb_upper'] = bb.bollinger_hband()
         df['bb_lower'] = bb.bollinger_lband()
 
-        # تدريب نموذج ARIMA
-        model = ARIMA(df['price'], order=(3,1,1))
+        # نموذج ARIMA
+        model = ARIMA(df['price'], order=(3, 1, 1))
         fitted = model.fit()
         raw_forecast = fitted.forecast(steps=forecast_days)
 
-        # ضبط الحدود المنطقية للتوقع
+        # قص التوقعات ضمن حدود منطقية
         last_price = df['price'].iloc[-1]
         lower_bound = last_price * 0.85
         upper_bound = last_price * 1.15
         clipped_forecast = raw_forecast.clip(lower=lower_bound, upper=upper_bound)
 
-        # تحويل إلى مصفوفة 1D
-        clipped_array = np.ravel(np.array(clipped_forecast))
+        # ✅ تحويل إلى 1D باستخدام squeeze
+        clipped_array = np.squeeze(clipped_forecast)
 
+        # بناء جدول التوقع
         forecast_dates = pd.date_range(start=df['Date'].max() + pd.Timedelta(days=1), periods=forecast_days)
         forecast_df = pd.DataFrame({
             'التاريخ': forecast_dates,
@@ -54,11 +55,11 @@ if st.button("🚀 شغّل التحليل"):
         ema_now = df['EMA_7'].iloc[-1]
         st.info(f"🎯 السعر الحالي: ${last_price:,.2f} | المتوسط EMA 7: ${ema_now:,.2f}")
 
-        # عرض الجدول
+        # عرض جدول التوقع
         st.subheader(f"📅 توقع السعر لـ {forecast_days} يومًا قادمة")
         st.dataframe(forecast_df)
 
-        # الرسم البياني الفني
+        # رسم بياني فني
         st.subheader("📈 السعر والتحليل الفني")
         fig, ax = plt.subplots(figsize=(12, 5))
         ax.plot(df['Date'], df['price'], label="السعر الفعلي", color='blue')
@@ -71,14 +72,9 @@ if st.button("🚀 شغّل التحليل"):
         ax.legend()
         st.pyplot(fig)
 
-        # تقييم المؤشرات الفنية الأخيرة
+        # عرض المؤشرات الأخيرة
         st.subheader("📊 تقييم آخر المؤشرات")
         latest = df.dropna().iloc[-1]
         st.markdown(f"""
         - السعر الحالي: **${latest['price']:.2f}**
-        - RSI: **{latest['RSI']:.2f}** → {"📈 تشبع شراء" if latest['RSI'] > 70 else "📉 تشبع بيع" if latest['RSI'] < 30 else "⚖️ حيادي"}
-        - نطاق Bollinger: **{latest['bb_lower']:.2f} ~ {latest['bb_upper']:.2f}**
-        """)
-
-    except Exception as e:
-        st.error(f"⚠️ حدث خطأ أثناء التحليل:\n\n{str(e)}")
+        - RSI: **{latest['RSI']:.2f}** → {"📈 تشبع شراء" if latest['RSI'] > 70 else "📉 تشبع بيع" if
