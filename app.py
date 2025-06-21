@@ -41,15 +41,18 @@ with st.sidebar:
     start = st.date_input(
         "📆 تاريخ البداية",
         value=pd.to_datetime("2023-01-01"),
-        max_value=datetime.now() - timedelta(days=7))
+        max_value=datetime.now() - timedelta(days=7)
+    )
     end = st.date_input(
         "📆 تاريخ النهاية",
         value=datetime.now(),
         min_value=start + timedelta(days=7),
-        max_value=datetime.now())
+        max_value=datetime.now()
+    )
     forecast_days = st.slider(
         "🔮 عدد الأيام المستقبلية:",
-        min_value=1, max_value=60, value=14)
+        min_value=1, max_value=60, value=14
+    )
     arima_order = st.selectbox(
         "🧠 معاملات ARIMA (p,d,q):",
         options=[(3,1,1), (5,1,2), (7,2,3), "تلقائي"],
@@ -62,10 +65,10 @@ with st.sidebar:
     - البيانات تُحمّل من Yahoo Finance.
     """)
 
+# زر البدء
 if st.button("🚀 بدء التحليل", use_container_width=True):
     with st.spinner("جاري تحليل البيانات..."):
         try:
-            # تحميل البيانات مع معالجة الأخطاء
             df = load_data(ticker, start, end)
             if df.empty:
                 st.error("⚠️ لم يتم العثور على بيانات للفترة المحددة!")
@@ -75,39 +78,23 @@ if st.button("🚀 بدء التحليل", use_container_width=True):
             df.reset_index(inplace=True)
             df.rename(columns={'Close': 'price'}, inplace=True)
 
-            # ======= التحليل الفني المتقدم =======
+            # التحليل الفني
             df['EMA_7'] = df['price'].ewm(span=7, adjust=False).mean()
             df['EMA_14'] = df['price'].ewm(span=14, adjust=False).mean()
             df['SMA_7'] = df['price'].rolling(window=7).mean()
             df['SMA_14'] = df['price'].rolling(window=14).mean()
-            
-            # RSI مع فترات متعددة
             df['RSI_14'] = ta.momentum.RSIIndicator(close=df['price'], window=14).rsi()
             df['RSI_7'] = ta.momentum.RSIIndicator(close=df['price'], window=7).rsi()
-            
-            # بولينجر باندز
             bb = ta.volatility.BollingerBands(close=df['price'], window=14, window_dev=2)
             df['bb_upper'] = bb.bollinger_hband()
             df['bb_middle'] = bb.bollinger_mavg()
             df['bb_lower'] = bb.bollinger_lband()
-            
-            # MACD
-            df['MACD'] = ta.trend.MACD(close=df['price']).macd()
-            df['MACD_signal'] = ta.trend.MACD(close=df['price']).macd_signal()
+            macd = ta.trend.MACD(close=df['price'])
+            df['MACD'] = macd.macd()
+            df['MACD_signal'] = macd.macd_signal()
 
-            # ======= إصلاح المشكلة الرئيسية =======
-            # تحويل البيانات إلى سلسلة أحادية البعد
+            # ARIMA
             price_series = df['price'].dropna()
-            
-            # تحقق إضافي للتأكد من شكل البيانات
-            if isinstance(price_series, pd.DataFrame):
-                price_series = price_series.squeeze()
-            
-            if price_series.ndim > 1:
-                price_series = price_series.ravel()
-
-            # ======= نموذج ARIMA المحسن =======
-            # اختيار معاملات ARIMA تلقائياً إذا طلب المستخدم
             if arima_order == "تلقائي":
                 auto_model = auto_arima(
                     price_series,
@@ -120,40 +107,38 @@ if st.button("🚀 بدء التحليل", use_container_width=True):
                 st.success(f"تم اختيار معاملات ARIMA تلقائياً: {order}")
             else:
                 order = arima_order
-            
+
             model = ARIMA(price_series, order=order)
             fitted = model.fit()
-            
-            # التنبؤ مع حدود واقعية
+
+            # التنبؤ
             last_price = price_series.iloc[-1]
             forecast = fitted.forecast(steps=forecast_days)
-            volatility = price_series.pct_change().std()  # قياس التقلب التاريخي
-            
-            # تطبيق الحدود على التنبؤات
-            forecast = np.clip(
-                forecast,
-                last_price * (1 - 2*volatility),
-                last_price * (1 + 2*volatility)
+            forecast_values = forecast.values.flatten()  # ✅ حل المشكلة هنا
+            volatility = price_series.pct_change().std()
+            forecast_values = np.clip(
+                forecast_values,
+                last_price * (1 - 2 * volatility),
+                last_price * (1 + 2 * volatility)
             )
 
-            # إعداد بيانات التنبؤ
+            # تجهيز بيانات التنبؤ
             forecast_dates = pd.date_range(
                 start=df['Date'].iloc[-1] + pd.Timedelta(days=1),
                 periods=forecast_days
             )
             forecast_df = pd.DataFrame({
                 'التاريخ': forecast_dates,
-                'السعر المتوقع': forecast.round(2),
-                'التغير %': ((forecast/last_price - 1)*100).round(2),
-                'الإشارة': np.where(forecast > last_price, '📈 صعود', '📉 هبوط')
+                'السعر المتوقع': forecast_values.round(2),
+                'التغير %': ((forecast_values / last_price - 1) * 100).round(2),
+                'الإشارة': np.where(forecast_values > last_price, '📈 صعود', '📉 هبوط')
             })
 
-            # ======= عرض النتائج =======
+            # العرض
             st.success("✅ تم الانتهاء من التحليل بنجاح!")
-            
-            # 1. بطاقة الأداء الرئيسية
-            current_rsi = df['RSI_14'].iloc[-1]
+
             col1, col2, col3 = st.columns(3)
+            current_rsi = df['RSI_14'].iloc[-1]
             with col1:
                 st.metric("السعر الحالي", f"${last_price:,.2f}")
             with col2:
@@ -162,7 +147,6 @@ if st.button("🚀 بدء التحليل", use_container_width=True):
             with col3:
                 st.metric("التقلب الأخير", f"{(volatility*100):.2f}%")
 
-            # 2. جدول التنبؤات
             st.subheader(f"📅 توقعات السعر لـ {forecast_days} يوم القادمة")
             st.dataframe(
                 forecast_df.style.format({
@@ -172,47 +156,48 @@ if st.button("🚀 بدء التحليل", use_container_width=True):
                 hide_index=True
             )
 
-            # 3. الرسوم البيانية
+            # رسم بياني
             st.subheader("📊 التحليل الفني والتنبؤات")
             fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10), gridspec_kw={'height_ratios': [2, 1]})
-            
-            # الرسم العلوي: الأسعار والمتوسطات
             ax1.plot(df['Date'], df['price'], label="السعر", color='#1f77b4')
             ax1.plot(df['Date'], df['EMA_7'], label="EMA 7", linestyle="--", color='#ff7f0e')
             ax1.plot(df['Date'], df['EMA_14'], label="EMA 14", linestyle="--", color='#2ca02c')
             ax1.fill_between(df['Date'], df['bb_lower'], df['bb_upper'], color='gray', alpha=0.1, label="نطاق بولينجر")
-            ax1.plot(forecast_dates, forecast, 'ro--', label="التنبؤ")
+            ax1.plot(forecast_dates, forecast_values, 'ro--', label="التنبؤ")
             ax1.set_title("تحليل السعر والمؤشرات")
             ax1.legend(loc='upper left')
-            
-            # الرسم السفلي: RSI والمؤشرات
+
             ax2.plot(df['Date'], df['RSI_14'], label="RSI 14", color='#9467bd')
             ax2.axhline(70, linestyle='--', color='red', alpha=0.3)
             ax2.axhline(30, linestyle='--', color='green', alpha=0.3)
             ax2.set_title("مؤشر RSI")
             ax2.legend()
-            
+
             plt.tight_layout()
             st.pyplot(fig)
 
-            # 4. التحليل النصي
+            # ملخص نصي
             st.subheader("📝 ملخص التحليل")
             latest = df.iloc[-1]
-            
             analysis = f"""
             - **الاتجاه العام:** {'صاعد' if latest['price'] > latest['EMA_14'] else 'هابط'}
             - **تقييم RSI (14):** {current_rsi:.1f} → {'🔴 تشبع شراء (قد يكون السعر مبالغاً فيه)' if current_rsi > 70 else '🟢 تشبع بيع (فرصة شراء محتملة)' if current_rsi < 30 else '🟡 منطقة محايدة'}
             - **نطاق بولينجر:** السعر حالياً عند {'🟢 الجزء السفلي (إشارة شراء)' if latest['price'] < latest['bb_lower'] else '🔴 الجزء العلوي (إشارة بيع)' if latest['price'] > latest['bb_upper'] else '🟡 المنطقة الوسطى'}
             - **إشارة MACD:** {'🟢 إيجابية (زخم صاعد)' if latest['MACD'] > latest['MACD_signal'] else '🔴 سلبية (زخم هابط)'}
             """
-            
             st.markdown(analysis)
-            
-            # 5. تحميل البيانات
+
+            # التحميل
             st.download_button(
-                label="📥 تحميل بيانات التحليل",
+                label="📥 تحميل بيانات التحليل الفني",
                 data=df.to_csv(index=False).encode('utf-8'),
                 file_name=f"{ticker}_analysis.csv",
+                mime="text/csv"
+            )
+            st.download_button(
+                label="📥 تحميل توقعات ARIMA",
+                data=forecast_df.to_csv(index=False).encode('utf-8'),
+                file_name=f"{ticker}_forecast.csv",
                 mime="text/csv"
             )
 
@@ -220,7 +205,7 @@ if st.button("🚀 بدء التحليل", use_container_width=True):
             st.error(f"⚠️ حدث خطأ أثناء التحليل:\n\n{str(e)}")
             st.stop()
 
-# تذييل الصفحة
+# التذييل
 st.markdown("---")
 st.caption("""
 تم تطوير هذا التطبيق باستخدام Python (Streamlit, yfinance, statsmodels, ta-lib).  
