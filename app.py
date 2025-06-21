@@ -7,7 +7,6 @@ Original file is located at
     https://colab.research.google.com/drive/1iuSRSUCDuwM2UUd2lFhOPlGKmDUUrTEG
 """
 
-!pip install textblob
 from textblob import TextBlob
 
 !pip install yfinance
