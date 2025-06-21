@@ -8,13 +8,6 @@ Original file is located at
 """
 
 from textblob import TextBlob
-
-!pip install yfinance
-!pip install ta
-!pip install vaderSentiment
-!pip install statsmodels
-!pip install newsapi-python
-
 !pip install feedparser
 import feedparser
 
