@@ -5,3 +5,5 @@ textblob
 feedparser
 matplotlib
 scikit-learn
+ta
+statsmodels
