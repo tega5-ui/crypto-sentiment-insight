@@ -27,19 +27,24 @@ end = st.date_input("📅 النهاية", pd.to_datetime("2025-07-01"))
 
 if ticker and st.button("🚀 شغّل التحليل"):
     try:
-        # تحميل البيانات المالية
+        # تحميل بيانات الأسعار
         price_data = yf.download(ticker, start=start, end=end)[['Close']].copy()
         price_data.reset_index(inplace=True)
-        price_data.columns.name = None  # إزالة أي أسماء للأعمدة من الفهرس
+        price_data.columns.name = None
         price_data.rename(columns={'Close': 'price'}, inplace=True)
+
+        # التحقق من وجود 'Date'
+        if 'Date' not in price_data.columns:
+            if 'index' in price_data.columns:
+                price_data.rename(columns={'index': 'Date'}, inplace=True)
+            elif 'Date' in price_data.index.names:
+                price_data = price_data.reset_index()
+            else:
+                st.error("⚠️ لم يتم العثور على عمود 'Date' في بيانات الأسعار.")
+                st.stop()
         price_data['Date'] = pd.to_datetime(price_data['Date'])
 
-        # معالجة الفهرسة: إزالة MultiIndex إن وجد
-        if isinstance(price_data.columns, pd.MultiIndex):
-            price_data.columns = ['_'.join(col).strip() for col in price_data.columns.values]
-            price_data.reset_index(inplace=True)
-
-        # جلب الأخبار
+        # جلب أخبار Google News
         def fetch_google_news_rss(query):
             url = f"https://news.google.com/rss/search?q={query.replace(' ', '+')}&hl=en-US&gl=US&ceid=US:en"
             feed = feedparser.parse(url)
@@ -58,12 +63,12 @@ if ticker and st.button("🚀 شغّل التحليل"):
         news_df['sentiment_score'] = news_df['description'].apply(analyze_sentiment)
         news_df['Date'] = pd.to_datetime(news_df['date'])
 
-        # مشاعر يومية
         daily_sentiment = news_df.groupby('Date')['sentiment_score'].mean().reset_index()
-        daily_sentiment.columns.name = None
-        if isinstance(daily_sentiment.columns, pd.MultiIndex):
-            daily_sentiment.columns = ['_'.join(col).strip() for col in daily_sentiment.columns.values]
-            daily_sentiment.reset_index(inplace=True)
+
+        # التأكد من وجود Date في daily_sentiment
+        if 'Date' not in daily_sentiment.columns:
+            st.error("⚠️ لم يتم العثور على عمود 'Date' في بيانات الأخبار.")
+            st.stop()
 
         # الدمج والتحليل
         merged = pd.merge(price_data, daily_sentiment, on='Date', how='left')
@@ -86,7 +91,7 @@ if ticker and st.button("🚀 شغّل التحليل"):
         ax.legend()
         st.pyplot(fig)
 
-        # الارتباط
+        # معامل الارتباط
         corr = merged['price'].corr(merged['sentiment_score'])
         st.success(f"💡 معامل الارتباط بين السعر والمشاعر: {corr:.3f}")
 
