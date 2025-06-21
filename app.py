@@ -29,28 +29,33 @@ if st.button("🚀 شغّل التحليل"):
         df['bb_upper'] = bb.bollinger_hband()
         df['bb_lower'] = bb.bollinger_lband()
 
-        # ✅ استخدام Series حقيقية باستخدام squeeze
-        price_series = df[['price']].squeeze()  # يضمن أنها 1D تمامًا
+        # ✅ تحويل السعر إلى Series 1D صريح
+        price_series = pd.Series(df['price'].values, index=df['Date'])
+
+        # تدريب نموذج ARIMA
         model = ARIMA(price_series, order=(3, 1, 1))
         fitted = model.fit()
         raw_forecast = fitted.forecast(steps=forecast_days)
 
-        # تحديد حدود منطقية للتوقع
+        # تطبيق حدود منطقية للتوقع
         last_price = price_series.iloc[-1]
         lower_bound = last_price * 0.85
         upper_bound = last_price * 1.15
-        clipped_array = np.clip(np.asarray(raw_forecast), lower_bound, upper_bound)
+        forecast_array = np.clip(np.squeeze(np.asarray(raw_forecast)), lower_bound, upper_bound)
 
+        # بناء جدول التوقع
         forecast_dates = pd.date_range(start=df['Date'].max() + pd.Timedelta(days=1), periods=forecast_days)
         forecast_df = pd.DataFrame({
             'التاريخ': forecast_dates,
-            'السعر المتوقع': clipped_array.round(2),
-            'المقارنة الحالية': ['📈 أعلى' if x > last_price else '📉 أقل' for x in clipped_array]
+            'السعر المتوقع': forecast_array.round(2),
+            'المقارنة الحالية': ['📈 أعلى' if x > last_price else '📉 أقل' for x in forecast_array]
         })
 
+        # مرجعية السعر الحالية
         ema_now = df['EMA_7'].iloc[-1]
         st.info(f"🎯 السعر الحالي: ${last_price:,.2f} | المتوسط EMA 7: ${ema_now:,.2f}")
 
+        # عرض التوقع
         st.subheader(f"📅 توقع السعر لـ {forecast_days} يومًا قادمة")
         st.dataframe(forecast_df)
 
@@ -67,7 +72,7 @@ if st.button("🚀 شغّل التحليل"):
         ax.legend()
         st.pyplot(fig)
 
-        # المؤشرات النهائية
+        # مؤشرات اليوم الأخير
         st.subheader("📊 تقييم آخر المؤشرات")
         latest = df.dropna().iloc[-1]
         rsi_value = latest['RSI']
