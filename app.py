@@ -68,4 +68,4 @@ if ticker and st.button("🚀 شغّل التحليل"):
         # الدمج
         merged = pd.merge(price_data, daily_sentiment, on='Date', how='left')
         merged['sentiment_score'].fillna(0, inplace=True)
-        merged['lagged_sentiment'] = merged['sentiment_score'].
+merged['lagged_sentiment'] = merged['sentiment_score'].shift(1)
