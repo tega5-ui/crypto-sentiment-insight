@@ -1,113 +1,67 @@
 import streamlit as st
 import pandas as pd
 import yfinance as yf
-import feedparser
-from textblob import TextBlob
-from sklearn.linear_model import LinearRegression
+from statsmodels.tsa.arima.model import ARIMA
 import matplotlib.pyplot as plt
-import requests
+import numpy as np
+import ta
 
-st.set_page_config(page_title="تحليل العملات والتوقع", layout="wide")
-st.title("📊 تحليل العملات المشفرة وتوقع الأسعار بناءً على الأخبار")
+st.set_page_config(page_title="📈 توقع السعر الفني", layout="wide")
+st.title("📊 توقع السعر المستقبلي بالتحليل الفني فقط (بدون مشاعر)")
 
-# واجهة اختيار العملة
-tickers = ["BTC-USD", "ETH-USD", "BNB-USD", "ADA-USD", "SOL-USD", "XRP-USD", "DOGE-USD", "AVAX-USD", "MATIC-USD", "GALA-USD", "أخرى..."]
-selected = st.selectbox("🪙 اختر العملة:", tickers)
-ticker = st.text_input("✍️ أدخل الرمز يدويًا:", "") if selected == "أخرى..." else selected
+# اختيار العملة والفترة
+tickers = ["BTC-USD", "ETH-USD", "ADA-USD", "BNB-USD", "SOL-USD"]
+ticker = st.selectbox("🪙 اختر العملة:", tickers)
+start = st.date_input("🗓️ بداية الفترة", pd.to_datetime("2023-01-01"))
+end = st.date_input("🗓️ نهاية الفترة", pd.to_datetime("2025-07-01"))
+forecast_days = st.radio("🔮 عدد الأيام المستقبلية:", [5, 14, 30], horizontal=True)
 
-# عرض السعر اللحظي
-symbol_map = {
-    "BTC-USD": "bitcoin", "ETH-USD": "ethereum", "BNB-USD": "binancecoin",
-    "ADA-USD": "cardano", "SOL-USD": "solana", "XRP-USD": "ripple",
-    "DOGE-USD": "dogecoin", "AVAX-USD": "avalanche-2",
-    "MATIC-USD": "matic-network", "GALA-USD": "gala"
-}
-if ticker:
-    coin_id = symbol_map.get(ticker.upper())
-    if coin_id:
-        try:
-            url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd"
-            r = requests.get(url)
-            if r.status_code == 200:
-                current_price = r.json()[coin_id]['usd']
-                st.metric("💰 السعر الحالي", f"${current_price:,.4f}")
-        except:
-            st.warning("⚠️ تعذر جلب السعر اللحظي.")
-
-# اختيار التاريخ وعدد الأيام المستقبلية
-start = st.date_input("📅 البداية", pd.to_datetime("2023-01-01"))
-end = st.date_input("📅 النهاية", pd.to_datetime("2025-07-01"))
-forecast_days = st.radio("📆 عدد الأيام للتوقع:", [5, 14, 30], horizontal=True)
-
-if ticker and st.button("🚀 شغّل التحليل"):
+if st.button("🚀 تشغيل التحليل الفني"):
     try:
-        df = yf.download(ticker, start=start, end=end)[['Close']]
+        df = yf.download(ticker, start=start, end=end)
         df.reset_index(inplace=True)
-        df.columns = ['Date', 'price']
-        df['SMA_7'] = df['price'].rolling(7).mean()
+        df = df[["Date", "Close"]].rename(columns={"Close": "price"})
+
+        # الحسابات الفنية
+        df['SMA_7'] = df['price'].rolling(window=7).mean()
         df['EMA_7'] = df['price'].ewm(span=7).mean()
+        df['RSI'] = ta.momentum.RSIIndicator(df['price']).rsi()
+        bb = ta.volatility.BollingerBands(close=df['price'])
+        df['bb_upper'] = bb.bollinger_hband()
+        df['bb_lower'] = bb.bollinger_lband()
 
-        def fetch_news(q):
-            url = f"https://news.google.com/rss/search?q={q}+crypto&hl=en-US&gl=US&ceid=US:en"
-            entries = feedparser.parse(url).entries
-            news = [{'title': e.title, 'description': e.description, 'published': e.published} for e in entries[:5]]
-            df = pd.DataFrame(news)
-            df['date'] = pd.to_datetime(df['published']).dt.date
-            return df
+        # توقع ARIMA
+        model = ARIMA(df['price'], order=(3,1,1))
+        model_fit = model.fit()
+        forecast = model_fit.forecast(steps=forecast_days)
+        forecast_dates = pd.date_range(start=df['Date'].max() + pd.Timedelta(days=1), periods=forecast_days)
+        forecast_df = pd.DataFrame({'التاريخ': forecast_dates, 'السعر المتوقع': forecast.values})
 
-        def analyze(text):
-            return TextBlob(text).sentiment.polarity if text else 0
-
-        news = fetch_news(ticker.split("-")[0])
-        news['sentiment_score'] = news['description'].apply(analyze)
-        news['Date'] = pd.to_datetime(news['date'])
-        daily_sent = news.groupby('Date')['sentiment_score'].mean().reset_index()
-
-        merged = pd.merge(df, daily_sent, on='Date', how='left')
-        merged['sentiment_score'].fillna(0, inplace=True)
-        merged['lagged_sentiment'] = merged['sentiment_score'].shift(1)
-        merged.dropna(inplace=True)
-
-        model = LinearRegression()
-        model.fit(merged[['lagged_sentiment']], merged['price'])
-        merged['predicted_price'] = model.predict(merged[['lagged_sentiment']])
-
-        recent_sent = merged['sentiment_score'].tail(3).mean()
-        future_dates = pd.date_range(merged['Date'].max() + pd.Timedelta(days=1), periods=forecast_days)
-        future = pd.DataFrame({'Date': future_dates})
-        future['lagged_sentiment'] = recent_sent
-        future['predicted_price'] = model.predict(future[['lagged_sentiment']])
-        future['trend'] = future['predicted_price'].diff().apply(lambda x: "📈 صعود" if x > 0 else ("📉 نزول" if x < 0 else "— ثبات"))
-
-        st.subheader("📈 السعر الفعلي والمتوسطات والتوقع")
-        fig, ax = plt.subplots(figsize=(12, 5))
-        ax.plot(merged['Date'], merged['price'], label="السعر", color='blue')
-        ax.plot(merged['Date'], merged['SMA_7'], label="SMA 7", linestyle="--", color='gray')
-        ax.plot(merged['Date'], merged['EMA_7'], label="EMA 7", linestyle="--", color='purple')
-        ax.plot(merged['Date'], merged['predicted_price'], label="التوقع السابق", color='green')
-        ax.plot(future['Date'], future['predicted_price'], label="توقع مستقبلي", linestyle='--', color='orange')
-        ax.set_xlabel("التاريخ")
-        ax.set_ylabel("السعر")
+        # الرسم البياني
+        st.subheader("📈 السعر والتحليل الفني")
+        fig, ax = plt.subplots(figsize=(12,5))
+        ax.plot(df['Date'], df['price'], label="السعر الفعلي", color='blue')
+        ax.plot(df['Date'], df['EMA_7'], label="EMA 7", linestyle="--", color='orange')
+        ax.plot(df['Date'], df['SMA_7'], label="SMA 7", linestyle="--", color='green')
+        ax.plot(df['Date'], df['bb_upper'], label="Bollinger Upper", linestyle=":", color='gray')
+        ax.plot(df['Date'], df['bb_lower'], label="Bollinger Lower", linestyle=":", color='gray')
         ax.legend()
         st.pyplot(fig)
 
-        corr = merged['price'].corr(merged['sentiment_score'])
-        st.markdown(f"### 💡 معامل الارتباط: `{corr:.3f}`")
-        if abs(corr) < 0.1:
-            st.info("↔️ لا يوجد ارتباط قوي بين السعر والمشاعر.")
-        elif corr > 0:
-            st.success("🔺 المشاعر الإيجابية مرتبطة بارتفاع السعر.")
-        else:
-            st.warning("🔻 المشاعر السلبية مرتبطة بانخفاض السعر.")
+        # جدول التوقع المستقبلي
+        st.subheader(f"📅 جدول توقع السعر لـ {forecast_days} يومًا قادمة")
+        forecast_df['السعر المتوقع'] = forecast_df['السعر المتوقع'].round(2)
+        st.dataframe(forecast_df)
 
-        st.subheader(f"📅 جدول التوقعات المستقبلية ({forecast_days} يومًا)")
-        display = future[['Date', 'predicted_price', 'trend']].copy()
-        display.columns = ['التاريخ', 'السعر المتوقع', 'الاتجاه']
-        st.dataframe(display.style.format({'السعر المتوقع': '{:.4f}'}))
-
-        st.subheader("📰 أهم الأخبار")
-        for _, row in news.iterrows():
-            st.markdown(f"**{row['title']}**  \n_{row['published']}_  \n> {row['description'][:200]}...")
+        # جدول المؤشرات الفنية لليوم الأخير
+        latest = df.dropna().iloc[-1]
+        st.subheader("📊 آخر قراءة للمؤشرات الفنية:")
+        st.markdown(f"""
+        - السعر الحالي: **${latest['price']:.2f}**
+        - EMA 7: **${latest['EMA_7']:.2f}**
+        - RSI: **{latest['RSI']:.2f}** → {"📈 تشبع شراء" if latest['RSI'] > 70 else "📉 تشبع بيع" if latest['RSI'] < 30 else "⚖️ حيادي"}
+        - Bollinger Band: **{latest['bb_lower']:.2f} ~ {latest['bb_upper']:.2f}**
+        """)
 
     except Exception as e:
-        st.error(f"🚨 حدث خطأ أثناء التحليل:\n\n{str(e)}")
+        st.error(f"حدث خطأ أثناء التحليل: {str(e)}")
