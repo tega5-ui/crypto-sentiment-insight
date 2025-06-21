@@ -29,37 +29,36 @@ if st.button("🚀 شغّل التحليل"):
         df['bb_upper'] = bb.bollinger_hband()
         df['bb_lower'] = bb.bollinger_lband()
 
-        # ✅ تحويل السعر إلى Series 1D صريح
-        price_series = pd.Series(df['price'].values, index=df['Date'])
+        # ✅ تحويل آمن لبيانات السعر إلى Series 1D
+        price_series = pd.Series(df[['price']].iloc[:, 0].values, index=df['Date'])
 
         # تدريب نموذج ARIMA
         model = ARIMA(price_series, order=(3, 1, 1))
         fitted = model.fit()
         raw_forecast = fitted.forecast(steps=forecast_days)
 
-        # تطبيق حدود منطقية للتوقع
+        # تطبيق قص منطقي
         last_price = price_series.iloc[-1]
         lower_bound = last_price * 0.85
         upper_bound = last_price * 1.15
         forecast_array = np.clip(np.squeeze(np.asarray(raw_forecast)), lower_bound, upper_bound)
 
-        # بناء جدول التوقع
-        forecast_dates = pd.date_range(start=df['Date'].max() + pd.Timedelta(days=1), periods=forecast_days)
+        # جدول التوقع
+        forecast_dates = pd.date_range(start=price_series.index[-1] + pd.Timedelta(days=1), periods=forecast_days)
         forecast_df = pd.DataFrame({
             'التاريخ': forecast_dates,
             'السعر المتوقع': forecast_array.round(2),
             'المقارنة الحالية': ['📈 أعلى' if x > last_price else '📉 أقل' for x in forecast_array]
         })
 
-        # مرجعية السعر الحالية
+        # المرجعية
         ema_now = df['EMA_7'].iloc[-1]
         st.info(f"🎯 السعر الحالي: ${last_price:,.2f} | المتوسط EMA 7: ${ema_now:,.2f}")
 
-        # عرض التوقع
         st.subheader(f"📅 توقع السعر لـ {forecast_days} يومًا قادمة")
         st.dataframe(forecast_df)
 
-        # الرسم البياني الفني
+        # رسم السعر والمؤشرات
         st.subheader("📈 السعر والتحليل الفني")
         fig, ax = plt.subplots(figsize=(12, 5))
         ax.plot(df['Date'], df['price'], label="السعر الفعلي", color='blue')
