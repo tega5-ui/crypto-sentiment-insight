@@ -29,21 +29,18 @@ if st.button("🚀 شغّل التحليل"):
         df['bb_upper'] = bb.bollinger_hband()
         df['bb_lower'] = bb.bollinger_lband()
 
-        # نموذج ARIMA
+        # ✅ تمرير بيانات 1D صحيحة إلى ARIMA
         model = ARIMA(df['price'], order=(3, 1, 1))
         fitted = model.fit()
         raw_forecast = fitted.forecast(steps=forecast_days)
 
-        # قص التوقعات ضمن حدود منطقية
+        # ضبط التوقعات داخل حدود منطقية
         last_price = df['price'].iloc[-1]
         lower_bound = last_price * 0.85
         upper_bound = last_price * 1.15
-        clipped_forecast = raw_forecast.clip(lower=lower_bound, upper=upper_bound)
+        clipped_array = np.squeeze(np.asarray(raw_forecast.clip(lower=lower_bound, upper=upper_bound)))
 
-        # ✅ تحويل مضمون إلى 1D
-        clipped_array = np.squeeze(np.asarray(clipped_forecast))
-
-        # إنشاء جدول التوقع
+        # إنشاء التواريخ والجدول
         forecast_dates = pd.date_range(start=df['Date'].max() + pd.Timedelta(days=1), periods=forecast_days)
         forecast_df = pd.DataFrame({
             'التاريخ': forecast_dates,
@@ -51,15 +48,15 @@ if st.button("🚀 شغّل التحليل"):
             'المقارنة الحالية': ['📈 أعلى' if x > last_price else '📉 أقل' for x in clipped_array]
         })
 
-        # عرض مرجعية السعر
+        # مرجعية السعر الحالية
         ema_now = df['EMA_7'].iloc[-1]
         st.info(f"🎯 السعر الحالي: ${last_price:,.2f} | المتوسط EMA 7: ${ema_now:,.2f}")
 
-        # عرض التوقع
+        # جدول التوقع
         st.subheader(f"📅 توقع السعر لـ {forecast_days} يومًا قادمة")
         st.dataframe(forecast_df)
 
-        # الرسم الفني
+        # الرسم البياني الفني
         st.subheader("📈 السعر والتحليل الفني")
         fig, ax = plt.subplots(figsize=(12, 5))
         ax.plot(df['Date'], df['price'], label="السعر الفعلي", color='blue')
@@ -72,7 +69,7 @@ if st.button("🚀 شغّل التحليل"):
         ax.legend()
         st.pyplot(fig)
 
-        # مؤشرات اليوم الأخير
+        # المؤشرات النهائية
         st.subheader("📊 تقييم آخر المؤشرات")
         latest = df.dropna().iloc[-1]
         rsi_value = latest['RSI']
