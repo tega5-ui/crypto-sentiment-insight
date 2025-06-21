@@ -1,0 +1,7 @@
+streamlit
+pandas
+yfinance
+textblob
+feedparser
+matplotlib
+scikit-learn
