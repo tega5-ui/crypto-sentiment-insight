@@ -28,7 +28,7 @@ end = st.date_input("📅 النهاية", pd.to_datetime("2025-07-01"))
 
 if ticker and st.button("🚀 شغّل التحليل"):
     try:
-        # تحميل بيانات الأسعار وتنسيق التاريخ
+        # تحميل بيانات الأسعار
         price_data = yf.download(ticker, start=start, end=end)[['Close']].copy()
         price_data.reset_index(inplace=True)
         price_data.rename(columns={'Close': 'price'}, inplace=True)
@@ -56,16 +56,38 @@ if ticker and st.button("🚀 شغّل التحليل"):
         news_df['sentiment_score'] = news_df['description'].apply(analyze_sentiment)
         news_df['Date'] = pd.to_datetime(news_df['date'])
 
-        # حساب متوسط المشاعر يوميًا
         daily_sentiment = news_df.groupby('Date')['sentiment_score'].mean().reset_index()
 
-        # التأكد من أن 'Date' عمود عادي في كلا الجدولين
+        # تأكيد أعمدة الدمج
         if 'Date' not in price_data.columns:
             price_data.reset_index(inplace=True)
         if 'Date' not in daily_sentiment.columns:
             daily_sentiment.reset_index(inplace=True)
 
-        # الدمج
+        # الدمج ومعالجة القيم الناقصة
         merged = pd.merge(price_data, daily_sentiment, on='Date', how='left')
         merged['sentiment_score'].fillna(0, inplace=True)
-merged['lagged_sentiment'] = merged['sentiment_score']
+        merged['lagged_sentiment'] = merged['sentiment_score'].shift(1)
+        merged.dropna(inplace=True)
+
+        # التنبؤ
+        model = LinearRegression()
+        model.fit(merged[['lagged_sentiment']], merged['price'])
+        merged['predicted_price'] = model.predict(merged[['lagged_sentiment']])
+
+        # عرض الرسم
+        st.subheader("📈 السعر الفعلي مقابل التوقع")
+        fig, ax = plt.subplots(figsize=(12, 5))
+        ax.plot(merged['Date'], merged['price'], label="السعر الفعلي", color='blue')
+        ax.plot(merged['Date'], merged['predicted_price'], label="السعر المتوقع", color='green')
+        ax.set_xlabel("التاريخ")
+        ax.set_ylabel("السعر")
+        ax.legend()
+        st.pyplot(fig)
+
+        # معامل الارتباط
+        correlation = merged['price'].corr(merged['sentiment_score'])
+        st.success(f"💡 معامل الارتباط بين السعر والمشاعر: {correlation:.3f}")
+
+    except Exception as e:
+        st.error(f"حدث خطأ أثناء التحليل: {str(e)}", icon="🚨")
