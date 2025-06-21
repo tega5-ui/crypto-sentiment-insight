@@ -34,19 +34,14 @@ if st.button("🚀 شغّل التحليل"):
         fitted = model.fit()
         raw_forecast = fitted.forecast(steps=forecast_days)
 
-        # ضبط حدود التوقع (±15%)
+        # ضبط الحدود المنطقية للتوقع
         last_price = df['price'].iloc[-1]
         lower_bound = last_price * 0.85
         upper_bound = last_price * 1.15
         clipped_forecast = raw_forecast.clip(lower=lower_bound, upper=upper_bound)
 
-        # تحويل التوقع إلى array مسطّح
-        if isinstance(clipped_forecast, (pd.Series, list)):
-            clipped_array = np.array(clipped_forecast)
-        else:
-            clipped_array = clipped_forecast
-        if clipped_array.ndim > 1:
-            clipped_array = clipped_array.flatten()
+        # تحويل إلى مصفوفة 1D
+        clipped_array = np.ravel(np.array(clipped_forecast))
 
         forecast_dates = pd.date_range(start=df['Date'].max() + pd.Timedelta(days=1), periods=forecast_days)
         forecast_df = pd.DataFrame({
@@ -55,11 +50,11 @@ if st.button("🚀 شغّل التحليل"):
             'المقارنة الحالية': ['📈 أعلى' if x > last_price else '📉 أقل' for x in clipped_array]
         })
 
-        # عرض مرجعية السعر الحالية
+        # مرجعية السعر الحالية
         ema_now = df['EMA_7'].iloc[-1]
         st.info(f"🎯 السعر الحالي: ${last_price:,.2f} | المتوسط EMA 7: ${ema_now:,.2f}")
 
-        # عرض التوقع
+        # عرض الجدول
         st.subheader(f"📅 توقع السعر لـ {forecast_days} يومًا قادمة")
         st.dataframe(forecast_df)
 
@@ -76,7 +71,7 @@ if st.button("🚀 شغّل التحليل"):
         ax.legend()
         st.pyplot(fig)
 
-        # المؤشرات الفنية الأخيرة
+        # تقييم المؤشرات الفنية الأخيرة
         st.subheader("📊 تقييم آخر المؤشرات")
         latest = df.dropna().iloc[-1]
         st.markdown(f"""
