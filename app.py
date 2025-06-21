@@ -40,10 +40,10 @@ if st.button("🚀 شغّل التحليل"):
         upper_bound = last_price * 1.15
         clipped_forecast = raw_forecast.clip(lower=lower_bound, upper=upper_bound)
 
-        # تحويل إلى 1D باستخدام squeeze
-        clipped_array = np.squeeze(clipped_forecast)
+        # ✅ تحويل مضمون إلى 1D
+        clipped_array = np.squeeze(np.asarray(clipped_forecast))
 
-        # بناء جدول التوقع
+        # إنشاء جدول التوقع
         forecast_dates = pd.date_range(start=df['Date'].max() + pd.Timedelta(days=1), periods=forecast_days)
         forecast_df = pd.DataFrame({
             'التاريخ': forecast_dates,
@@ -51,15 +51,15 @@ if st.button("🚀 شغّل التحليل"):
             'المقارنة الحالية': ['📈 أعلى' if x > last_price else '📉 أقل' for x in clipped_array]
         })
 
-        # مرجعية السعر الحالية
+        # عرض مرجعية السعر
         ema_now = df['EMA_7'].iloc[-1]
         st.info(f"🎯 السعر الحالي: ${last_price:,.2f} | المتوسط EMA 7: ${ema_now:,.2f}")
 
-        # عرض جدول التوقع
+        # عرض التوقع
         st.subheader(f"📅 توقع السعر لـ {forecast_days} يومًا قادمة")
         st.dataframe(forecast_df)
 
-        # رسم بياني فني
+        # الرسم الفني
         st.subheader("📈 السعر والتحليل الفني")
         fig, ax = plt.subplots(figsize=(12, 5))
         ax.plot(df['Date'], df['price'], label="السعر الفعلي", color='blue')
@@ -72,7 +72,7 @@ if st.button("🚀 شغّل التحليل"):
         ax.legend()
         st.pyplot(fig)
 
-        # عرض المؤشرات الأخيرة
+        # مؤشرات اليوم الأخير
         st.subheader("📊 تقييم آخر المؤشرات")
         latest = df.dropna().iloc[-1]
         rsi_value = latest['RSI']
