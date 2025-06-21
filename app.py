@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 from statsmodels.tsa.arima.model import ARIMA
-from pmdarima import auto_arima  # للعثور على أفضل معاملات ARIMA تلقائياً
+from pmdarima import auto_arima
 import matplotlib.pyplot as plt
 import numpy as np
 import ta
@@ -41,7 +41,7 @@ with st.sidebar:
     start = st.date_input(
         "📆 تاريخ البداية",
         value=pd.to_datetime("2023-01-01"),
-        max_value=datetime.now() - timedelta(days=7)
+        max_value=datetime.now() - timedelta(days=7))
     end = st.date_input(
         "📆 تاريخ النهاية",
         value=datetime.now(),
@@ -95,9 +95,18 @@ if st.button("🚀 بدء التحليل", use_container_width=True):
             df['MACD'] = ta.trend.MACD(close=df['price']).macd()
             df['MACD_signal'] = ta.trend.MACD(close=df['price']).macd_signal()
 
-            # ======= نموذج ARIMA المحسن =======
+            # ======= إصلاح المشكلة الرئيسية =======
+            # تحويل البيانات إلى سلسلة أحادية البعد
             price_series = df['price'].dropna()
             
+            # تحقق إضافي للتأكد من شكل البيانات
+            if isinstance(price_series, pd.DataFrame):
+                price_series = price_series.squeeze()
+            
+            if price_series.ndim > 1:
+                price_series = price_series.ravel()
+
+            # ======= نموذج ARIMA المحسن =======
             # اختيار معاملات ARIMA تلقائياً إذا طلب المستخدم
             if arima_order == "تلقائي":
                 auto_model = auto_arima(
@@ -119,11 +128,14 @@ if st.button("🚀 بدء التحليل", use_container_width=True):
             last_price = price_series.iloc[-1]
             forecast = fitted.forecast(steps=forecast_days)
             volatility = price_series.pct_change().std()  # قياس التقلب التاريخي
+            
+            # تطبيق الحدود على التنبؤات
             forecast = np.clip(
                 forecast,
                 last_price * (1 - 2*volatility),
                 last_price * (1 + 2*volatility)
-            
+            )
+
             # إعداد بيانات التنبؤ
             forecast_dates = pd.date_range(
                 start=df['Date'].iloc[-1] + pd.Timedelta(days=1),
