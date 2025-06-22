@@ -7,10 +7,19 @@ import datetime
 import requests
 
 # إعداد الصفحة
-st.set_page_config(page_title="📈 التحليل الفني للعملات", layout="wide", page_icon="💹")
+st.set_page_config(page_title="📈 التحليل الفني للعملات الرقمية", layout="wide", page_icon="💹")
 st.title("💹 نظام التحليل الفني اللحظي للعملات الرقمية")
 
-# دالة السعر اللحظي من CoinGecko
+# ترجمة رموز العملات من Yahoo إلى CoinGecko
+symbol_map = {
+    "BTC": "bitcoin",
+    "ETH": "ethereum",
+    "ADA": "cardano",
+    "BNB": "binancecoin",
+    "SOL": "solana"
+}
+
+# دالة لجلب السعر اللحظي
 def get_realtime_price(symbol="bitcoin", vs_currency="usd"):
     url = f"https://api.coingecko.com/api/v3/simple/price?ids={symbol}&vs_currencies={vs_currency}"
     try:
@@ -20,6 +29,7 @@ def get_realtime_price(symbol="bitcoin", vs_currency="usd"):
     except:
         return None
 
+# تحميل البيانات
 @st.cache_data
 def load_data(ticker, start, end):
     try:
@@ -28,9 +38,11 @@ def load_data(ticker, start, end):
         st.error(f"⚠️ خطأ في تحميل البيانات: {e}")
         return None
 
+# واجهة المستخدم
 tickers = ["BTC-USD", "ETH-USD", "ADA-USD", "BNB-USD", "SOL-USD"]
 ticker = st.selectbox("🪙 اختر العملة:", tickers)
-symbol_name = ticker.split("-")[0].lower()
+symbol_name = symbol_map.get(ticker.split("-")[0], "bitcoin")
+
 start = st.date_input("📆 تاريخ البداية", datetime.date(2023, 1, 1))
 end = st.date_input("📆 تاريخ النهاية", datetime.date.today())
 
@@ -43,8 +55,8 @@ if st.button("🚀 تنفيذ التحليل"):
 
         df = df[["Close"]].dropna().reset_index()
         df.rename(columns={"Date": "ds", "Close": "price"}, inplace=True)
-        price_series = df["price"].values.flatten()
         idx = df.index
+        price_series = df["price"].values.flatten()
 
         # المؤشرات الفنية
         df["EMA_7"] = pd.Series(price_series, index=idx).ewm(span=7).mean()
@@ -66,48 +78,50 @@ if st.button("🚀 تنفيذ التحليل"):
         latest = df.iloc[-1]
         price = float(latest["price"])
 
-        # السعر اللحظي
+        # 💲 السعر اللحظي
         st.subheader("💲 السعر اللحظي")
-        realtime_price = get_realtime_price(symbol=symbol_name)
+        realtime_price = get_realtime_price(symbol_name)
         if realtime_price:
             st.metric("السعر اللحظي", f"${realtime_price:,.2f}")
         else:
-            st.warning("⚠️ تعذر جلب السعر اللحظي")
+            st.warning("⚠️ تعذر جلب السعر اللحظي من CoinGecko")
 
-        # المؤشرات
+        # 📊 المؤشرات الفنية
         st.subheader("📊 المؤشرات الفنية")
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("EMA 7", f"${float(latest['EMA_7']):.2f}")
-            st.info("🔎 EMA 7 أعلى من EMA 14 → زخم صاعد." if latest["EMA_7"] > latest["EMA_14"]
-                    else "🔎 EMA 7 أقل من EMA 14 → ضعف في الزخم.")
+            if float(latest["EMA_7"]) > float(latest["EMA_14"]):
+                st.info("🔎 EMA 7 أعلى من EMA 14 → زخم صاعد.")
+            else:
+                st.info("🔎 EMA 7 أقل من EMA 14 → زخم ضعيف أو هبوط محتمل.")
         with col2:
             st.metric("RSI", f"{float(latest['RSI']):.2f}")
-            if latest["RSI"] > 70:
-                st.warning("⚠️ RSI في منطقة التشبع الشرائي.")
-            elif latest["RSI"] < 30:
-                st.success("✅ RSI في منطقة التشبع البيعي.")
+            if float(latest["RSI"]) > 70:
+                st.warning("⚠️ RSI يشير إلى تشبع شرائي.")
+            elif float(latest["RSI"]) < 30:
+                st.success("✅ RSI في منطقة تشبع بيعي.")
             else:
                 st.info("ℹ️ RSI في المنطقة المحايدة.")
         with col3:
             st.metric("نطاق بولينجر", f"{float(latest['BB_lower']):.2f} ~ {float(latest['BB_upper']):.2f}")
-            if price > latest["BB_upper"]:
-                st.warning("📈 السعر فوق النطاق — احتمال هبوط.")
-            elif price < latest["BB_lower"]:
+            if price > float(latest["BB_upper"]):
+                st.warning("📈 السعر خارج النطاق الأعلى — احتمال تصحيح.")
+            elif price < float(latest["BB_lower"]):
                 st.success("📉 السعر تحت النطاق — احتمال ارتداد.")
             else:
-                st.info("📊 السعر داخل نطاق بولينجر — تقلب معتدل.")
+                st.info("📊 السعر داخل نطاق بولينجر — تقلب طبيعي.")
 
-        # إشارات تداول
-        st.subheader("🚦 إشارة تداول")
-        if latest["RSI"] < 30 and latest["EMA_7"] > latest["EMA_14"]:
+        # 🚦 توصية تداول تلقائية
+        st.subheader("🚦 توصية تداول")
+        if float(latest["RSI"]) < 30 and float(latest["EMA_7"]) > float(latest["EMA_14"]):
             st.success("🔼 توصية: شراء")
-        elif latest["RSI"] > 70 and latest["EMA_7"] < latest["EMA_14"]:
+        elif float(latest["RSI"]) > 70 and float(latest["EMA_7"]) < float(latest["EMA_14"]):
             st.error("🔽 توصية: بيع")
         else:
-            st.info("⏸ توصية: حيادية — لا توجد إشارة قوية حالياً.")
+            st.info("⏸ توصية: حيادية")
 
-        # الرسم البياني
+        # 📈 الرسم البياني
         st.subheader("📈 الرسم البياني")
         fig, ax = plt.subplots(figsize=(14, 6))
         ax.plot(df["ds"], df["price"], label="السعر", color="blue")
@@ -118,8 +132,8 @@ if st.button("🚀 تنفيذ التحليل"):
         ax.legend()
         st.pyplot(fig)
 
-        # MACD
-        st.subheader("📉 مؤشر MACD")
+        # 📉 MACD
+        st.subheader("📉 MACD")
         fig_macd, ax_macd = plt.subplots(figsize=(14, 3))
         ax_macd.plot(df["ds"], df["MACD"], label="MACD", color="blue")
         ax_macd.plot(df["ds"], df["MACD_signal"], label="إشارة", color="red")
