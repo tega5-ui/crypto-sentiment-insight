@@ -7,3 +7,4 @@ ta
 statsmodels
 nltk
 TextBlob
+fpdf
