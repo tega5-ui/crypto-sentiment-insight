@@ -31,14 +31,14 @@ if st.button("🚀 شغّل التنبؤ"):
         future = model.make_future_dataframe(periods=forecast_days)
         forecast = model.predict(future)
 
-        # التحليل الفني على البيانات الأصلية
-        ta_df = df.copy()
-        ta_df['EMA_7'] = ta_df['y'].ewm(span=7).mean()
-        ta_df['SMA_7'] = ta_df['y'].rolling(window=7).mean()
-        ta_df['RSI'] = ta.momentum.RSIIndicator(close=ta_df['y']).rsi()
-        bb = ta.volatility.BollingerBands(close=ta_df['y'])
-        ta_df['bb_upper'] = bb.bollinger_hband()
-        ta_df['bb_lower'] = bb.bollinger_lband()
+        # معالجة yhat لضمان كونها Series 1D
+        forecast['yhat'] = forecast['yhat'].squeeze()
+
+        # جدول التوقعات القادمة
+        latest_price = df['y'].iloc[-1]
+        future_forecast = forecast[['ds', 'yhat']].tail(forecast_days)
+        future_forecast['المقارنة الحالية'] = ['📈 أعلى' if float(x) > latest_price else '📉 أقل' for x in future_forecast['yhat']]
+        future_forecast.rename(columns={'ds': 'التاريخ', 'yhat': 'السعر المتوقع'}, inplace=True)
 
         # عرض التوقع
         st.subheader("📊 رسم التوقعات")
@@ -49,16 +49,19 @@ if st.button("🚀 شغّل التنبؤ"):
         fig2 = model.plot_components(forecast)
         st.pyplot(fig2)
 
-        # عرض جدول للتوقعات القادمة
-        future_forecast = forecast[['ds', 'yhat']].tail(forecast_days)
-        latest_price = df['y'].iloc[-1]
-        future_forecast['المقارنة الحالية'] = ['📈 أعلى' if x > latest_price else '📉 أقل' for x in future_forecast['yhat']]
-        future_forecast.rename(columns={'ds': 'التاريخ', 'yhat': 'السعر المتوقع'}, inplace=True)
         st.subheader(f"📅 جدول التوقع لـ {forecast_days} يومًا قادمة")
         st.dataframe(future_forecast)
 
         # التحليل الفني
         st.subheader("📈 التحليل الفني للسعر")
+        ta_df = df.copy()
+        ta_df['EMA_7'] = ta_df['y'].ewm(span=7).mean()
+        ta_df['SMA_7'] = ta_df['y'].rolling(window=7).mean()
+        ta_df['RSI'] = ta.momentum.RSIIndicator(close=ta_df['y']).rsi()
+        bb = ta.volatility.BollingerBands(close=ta_df['y'])
+        ta_df['bb_upper'] = bb.bollinger_hband()
+        ta_df['bb_lower'] = bb.bollinger_lband()
+
         fig3, ax = plt.subplots(figsize=(12, 5))
         ax.plot(ta_df['ds'], ta_df['y'], label='السعر الفعلي', color='blue')
         ax.plot(ta_df['ds'], ta_df['EMA_7'], label='EMA 7', linestyle="--", color='orange')
