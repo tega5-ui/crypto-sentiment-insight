@@ -5,10 +5,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import ta
 
+# إعداد الواجهة
 st.set_page_config(page_title="📈 تحليل السعر الفني", layout="wide")
 st.title("📊 تحليل فني للعملات الرقمية")
 
-# واجهة الإدخال
+# واجهة المستخدم
 tickers = ["BTC-USD", "ETH-USD", "ADA-USD", "BNB-USD", "SOL-USD"]
 ticker = st.selectbox("🪙 اختر العملة:", tickers)
 start = st.date_input("📆 تاريخ البداية", pd.to_datetime("2023-01-01"))
@@ -16,11 +17,15 @@ end = st.date_input("📆 تاريخ النهاية", pd.to_datetime("2025-07-01
 
 if st.button("🚀 تنفيذ التحليل"):
     try:
+        # جلب البيانات من Yahoo Finance
         df = yf.download(ticker, start=start, end=end)[['Close']].dropna()
         df.reset_index(inplace=True)
         df.rename(columns={'Date': 'ds', 'Close': 'price'}, inplace=True)
 
-        # المؤشرات الفنية
+        # تحويل السعر إلى سلسلة 1D بدون أي مشاكل أبعاد
+        df['price'] = df['price'].astype(float)
+
+        # حساب المؤشرات الفنية
         df['EMA_7'] = df['price'].ewm(span=7).mean()
         df['SMA_14'] = df['price'].rolling(window=14).mean()
         df['RSI'] = ta.momentum.RSIIndicator(close=df['price']).rsi()
@@ -28,22 +33,32 @@ if st.button("🚀 تنفيذ التحليل"):
         df['bb_upper'] = bb.bollinger_hband()
         df['bb_lower'] = bb.bollinger_lband()
 
-        # إشارات مبسطة
-        last = df.dropna().iloc[-1]
-        trend = "📈 صاعد" if last['EMA_7'] > last['SMA_14'] else "📉 هابط"
-        rsi = last['RSI']
-        rsi_signal = "🔴 تشبع شراء" if rsi > 70 else "🟢 تشبع بيع" if rsi < 30 else "⚪ حيادي"
+        # استخراج آخر صف بعد إسقاط القيم الفارغة
+        df = df.dropna()
+        latest = df.iloc[-1]
 
+        # إشارات مبسّطة
+        trend = "📈 صاعد" if latest['EMA_7'] > latest['SMA_14'] else "📉 هابط"
+        rsi_val = latest['RSI']
+        if rsi_val > 70:
+            rsi_signal = "🔴 تشبع شراء"
+        elif rsi_val < 30:
+            rsi_signal = "🟢 تشبع بيع"
+        else:
+            rsi_signal = "⚪ حيادي"
+
+        # عرض التحليل
         st.subheader("📊 المؤشرات الفنية الأخيرة")
         st.markdown(f"""
-        - السعر الحالي: **${last['price']:.2f}**
-        - EMA 7: **${last['EMA_7']:.2f}**
-        - SMA 14: **${last['SMA_14']:.2f}**
+        - السعر الحالي: **${latest['price']:.2f}**
+        - المتوسط المتحرك EMA 7: **${latest['EMA_7']:.2f}**
+        - المتوسط المتحرك SMA 14: **${latest['SMA_14']:.2f}**
         - الاتجاه العام: **{trend}**
-        - RSI: **{rsi:.2f} → {rsi_signal}**
-        - Bollinger Band: **{last['bb_lower']:.2f} ~ {last['bb_upper']:.2f}**
+        - RSI: **{rsi_val:.2f} → {rsi_signal}**
+        - Bollinger Band: **{latest['bb_lower']:.2f} ~ {latest['bb_upper']:.2f}**
         """)
 
+        # رسم المؤشرات الفنية
         st.subheader("📈 الرسم البياني")
         fig, ax = plt.subplots(figsize=(12, 5))
         ax.plot(df['ds'], df['price'], label='السعر', color='blue')
