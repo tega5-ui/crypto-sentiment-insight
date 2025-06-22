@@ -1,146 +1,86 @@
 import streamlit as st
 import pandas as pd
-import yfinance as yf
+import requests
+import datetime
 import matplotlib.pyplot as plt
 import ta
-import datetime
-import requests
 
-# إعداد الصفحة
-st.set_page_config(page_title="📈 التحليل الفني للعملات الرقمية", layout="wide", page_icon="💹")
-st.title("💹 نظام التحليل الفني اللحظي للعملات الرقمية")
+st.set_page_config(page_title="📈 تحليل لحظي من Binance", layout="wide")
+st.title("💹 تحليل فني لحظي + مناطق دخول من Binance")
 
-# ترجمة رموز العملات إلى CoinGecko
-symbol_map = {
-    "BTC": "bitcoin",
-    "ETH": "ethereum",
-    "ADA": "cardano",
-    "BNB": "binancecoin",
-    "SOL": "solana"
+# 🧠 إعدادات المستخدم
+symbols = {
+    "BTC/USDT": "BTCUSDT",
+    "ETH/USDT": "ETHUSDT",
+    "BNB/USDT": "BNBUSDT",
+    "SOL/USDT": "SOLUSDT"
 }
+symbol_name = st.selectbox("🪙 اختر العملة:", list(symbols.keys()))
+binance_symbol = symbols[symbol_name]
+interval = st.selectbox("⏱️ الإطار الزمني:", ["1m", "5m", "15m", "1h"], index=0)
+limit = st.slider("📊 عدد الشموع:", 50, 1000, 200)
 
-# جلب السعر اللحظي من CoinGecko
-def get_realtime_price(symbol="bitcoin", vs_currency="usd"):
-    url = f"https://api.coingecko.com/api/v3/simple/price?ids={symbol}&vs_currencies={vs_currency}"
+# 🛰️ جلب بيانات Binance
+def get_binance_ohlcv(symbol, interval="1m", limit=200):
+    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
+    r = requests.get(url)
+    data = r.json()
+    df = pd.DataFrame(data, columns=[
+        "timestamp", "open", "high", "low", "close", "volume",
+        "close_time", "quote_asset_volume", "number_of_trades",
+        "taker_buy_base", "taker_buy_quote", "ignore"
+    ])
+    df["ds"] = pd.to_datetime(df["timestamp"], unit="ms")
+    df["price"] = df["close"].astype(float)
+    return df[["ds", "price"]].copy()
+
+# 🚀 تنفيذ التحليل
+if st.button("🚀 تحليل الآن"):
     try:
-        response = requests.get(url)
-        data = response.json()
-        return data[symbol][vs_currency]
-    except:
-        return None
-
-# تحميل البيانات من yfinance
-@st.cache_data
-def load_data(ticker, start, end):
-    try:
-        return yf.download(ticker, start=start, end=end)
-    except Exception as e:
-        st.error(f"⚠️ خطأ في تحميل البيانات: {e}")
-        return None
-
-# واجهة المستخدم
-tickers = ["BTC-USD", "ETH-USD", "ADA-USD", "BNB-USD", "SOL-USD"]
-ticker = st.selectbox("🪙 اختر العملة:", tickers)
-symbol_name = symbol_map.get(ticker.split("-")[0], "bitcoin")
-start = st.date_input("📆 تاريخ البداية", datetime.date(2023, 1, 1))
-end = st.date_input("📆 تاريخ النهاية", datetime.date.today())
-
-if st.button("🚀 تنفيذ التحليل"):
-    try:
-        df = load_data(ticker, start, end)
-        if df is None or df.empty:
-            st.error("⚠️ لا توجد بيانات متاحة للفترة المحددة.")
-            st.stop()
-
-        df = df[["Close"]].dropna().reset_index()
-        df.rename(columns={"Date": "ds", "Close": "price"}, inplace=True)
-        price_series = df["price"].values.flatten()
-        idx = df.index
-
-        # حساب المؤشرات الفنية
-        df["EMA_7"] = pd.Series(price_series, index=idx).ewm(span=7).mean()
-        df["EMA_14"] = pd.Series(price_series, index=idx).ewm(span=14).mean()
-        df["SMA_20"] = pd.Series(price_series, index=idx).rolling(20).mean()
-
-        rsi = ta.momentum.RSIIndicator(close=pd.Series(price_series, index=idx))
-        df["RSI"] = rsi.rsi()
-
-        bb = ta.volatility.BollingerBands(close=pd.Series(price_series, index=idx))
+        df = get_binance_ohlcv(binance_symbol, interval, limit)
+        df["EMA_7"] = df["price"].ewm(span=7).mean()
+        df["EMA_14"] = df["price"].ewm(span=14).mean()
+        df["RSI"] = ta.momentum.RSIIndicator(close=df["price"]).rsi()
+        bb = ta.volatility.BollingerBands(close=df["price"])
         df["BB_upper"] = bb.bollinger_hband()
         df["BB_lower"] = bb.bollinger_lband()
-
-        macd = ta.trend.MACD(close=pd.Series(price_series, index=idx))
-        df["MACD"] = macd.macd()
-        df["MACD_signal"] = macd.macd_signal()
-
         df = df.dropna()
-
-        if df.empty:
-            st.warning("🚫 لا توجد بيانات كافية بعد المعالجة الفنية. جرّب اختيار فترة زمنية أطول.")
-            st.stop()
-
         latest = df.iloc[-1]
-        price = float(latest["price"])
 
-        # 💲 السعر اللحظي
-        st.subheader("💲 السعر اللحظي")
-        realtime_price = get_realtime_price(symbol_name)
-        if realtime_price:
-            st.metric("السعر اللحظي", f"${realtime_price:,.2f}")
-        else:
-            st.warning("⚠️ تعذر جلب السعر اللحظي من CoinGecko")
+        # 💡 مناطق الدخول
+        entry_signals = []
+        if latest["RSI"] < 30 and latest["EMA_7"] > latest["EMA_14"]:
+            entry_signals.append(f"✅ دخول محتمل عند السعر: ${latest['price']:.2f} (RSI منخفض و EMA صاعد)")
+        if latest["price"] < latest["BB_lower"]:
+            entry_signals.append(f"📉 السعر دون نطاق بولينجر → دخول محتمل عند: ${latest['price']:.2f}")
+        if not entry_signals:
+            entry_signals.append("⏸ لا توجد إشارات دخول قوية حاليًا.")
 
-        # 📊 المؤشرات الفنية
+        # 📊 عرض المؤشرات
         st.subheader("📊 المؤشرات الفنية")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("EMA 7", f"${float(latest['EMA_7']):.2f}")
-            st.info("🔎 EMA 7 أعلى من EMA 14 → زخم صاعد." if float(latest["EMA_7"]) > float(latest["EMA_14"]) else "🔎 EMA 7 أقل من EMA 14 → زخم ضعيف.")
-        with col2:
-            st.metric("RSI", f"{float(latest['RSI']):.2f}")
-            if float(latest["RSI"]) > 70:
-                st.warning("⚠️ RSI يشير إلى تشبع شرائي.")
-            elif float(latest["RSI"]) < 30:
-                st.success("✅ RSI في منطقة تشبع بيعي.")
-            else:
-                st.info("ℹ️ RSI في المنطقة المحايدة.")
-        with col3:
-            st.metric("نطاق بولينجر", f"{float(latest['BB_lower']):.2f} ~ {float(latest['BB_upper']):.2f}")
-            if price > float(latest["BB_upper"]):
-                st.warning("📈 السعر فوق الحد الأعلى — احتمال تصحيح.")
-            elif price < float(latest["BB_lower"]):
-                st.success("📉 السعر دون الحد الأدنى — احتمال ارتداد.")
-            else:
-                st.info("📊 السعر داخل نطاق طبيعي.")
+        st.markdown(f"""
+        - السعر الحالي: **${latest['price']:.2f}**
+        - EMA 7: **${latest['EMA_7']:.2f}**
+        - EMA 14: **${latest['EMA_14']:.2f}**
+        - RSI: **{latest['RSI']:.2f}**
+        - Bollinger Band: **{latest['BB_lower']:.2f} ~ {latest['BB_upper']:.2f}**
+        """)
 
-        # 🚦 توصية تداول تلقائية
-        st.subheader("🚦 توصية تداول")
-        if float(latest["RSI"]) < 30 and float(latest["EMA_7"]) > float(latest["EMA_14"]):
-            st.success("🔼 توصية: شراء")
-        elif float(latest["RSI"]) > 70 and float(latest["EMA_7"]) < float(latest["EMA_14"]):
-            st.error("🔽 توصية: بيع")
-        else:
-            st.info("⏸ توصية: حيادية")
+        # 📍 مناطق الدخول
+        st.subheader("📍 مناطق دخول محتملة")
+        for signal in entry_signals:
+            st.success(signal)
 
-        # 📈 رسم السعر والمؤشرات
+        # 📈 الرسم البياني
         st.subheader("📈 الرسم البياني")
         fig, ax = plt.subplots(figsize=(14, 6))
         ax.plot(df["ds"], df["price"], label="السعر", color="blue")
         ax.plot(df["ds"], df["EMA_7"], label="EMA 7", linestyle="--", color="orange")
         ax.plot(df["ds"], df["EMA_14"], label="EMA 14", linestyle="--", color="green")
-        ax.plot(df["ds"], df["SMA_20"], label="SMA 20", linestyle="-.", color="purple")
-        ax.fill_between(df["ds"], df["BB_lower"], df["BB_upper"], alpha=0.1, label="نطاق بولينجر", color="gray")
+        ax.plot(df["ds"], df["BB_upper"], label="Bollinger Upper", linestyle=":", color="gray")
+        ax.plot(df["ds"], df["BB_lower"], label="Bollinger Lower", linestyle=":", color="gray")
         ax.legend()
         st.pyplot(fig)
-
-        # 📉 رسم MACD
-        st.subheader("📉 MACD")
-        fig_macd, ax_macd = plt.subplots(figsize=(14, 3))
-        ax_macd.plot(df["ds"], df["MACD"], label="MACD", color="blue")
-        ax_macd.plot(df["ds"], df["MACD_signal"], label="إشارة", color="red")
-        ax_macd.axhline(0, color="gray", linestyle="--")
-        ax_macd.legend()
-        st.pyplot(fig_macd)
 
     except Exception as e:
         st.error(f"⚠️ حدث خطأ أثناء التحليل:\n\n{str(e)}")
