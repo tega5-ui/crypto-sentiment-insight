@@ -8,7 +8,7 @@ import ta
 st.set_page_config(page_title="📈 تحليل السعر الفني", layout="wide")
 st.title("📊 تحليل فني للعملات الرقمية")
 
-# اختيار العملة والتواريخ
+# واجهة الإدخال
 tickers = ["BTC-USD", "ETH-USD", "ADA-USD", "BNB-USD", "SOL-USD"]
 ticker = st.selectbox("🪙 اختر العملة:", tickers)
 start = st.date_input("📆 تاريخ البداية", pd.to_datetime("2023-01-01"))
@@ -16,12 +16,11 @@ end = st.date_input("📆 تاريخ النهاية", pd.to_datetime("2025-07-01
 
 if st.button("🚀 تنفيذ التحليل"):
     try:
-        # تحميل البيانات
         df = yf.download(ticker, start=start, end=end)[['Close']].dropna()
         df.reset_index(inplace=True)
         df.rename(columns={'Date': 'ds', 'Close': 'price'}, inplace=True)
 
-        # حساب المؤشرات الفنية
+        # المؤشرات الفنية
         df['EMA_7'] = df['price'].ewm(span=7).mean()
         df['SMA_14'] = df['price'].rolling(window=14).mean()
         df['RSI'] = ta.momentum.RSIIndicator(close=df['price']).rsi()
@@ -29,28 +28,22 @@ if st.button("🚀 تنفيذ التحليل"):
         df['bb_upper'] = bb.bollinger_hband()
         df['bb_lower'] = bb.bollinger_lband()
 
-        # إشارات بسيطة على الاتجاه
-        trend_signal = "📈 اتجاه صاعد" if df['EMA_7'].iloc[-1] > df['SMA_14'].iloc[-1] else "📉 اتجاه هابط"
-        rsi_val = df['RSI'].iloc[-1]
-        if rsi_val > 70:
-            rsi_signal = "🔴 تشبع شراء"
-        elif rsi_val < 30:
-            rsi_signal = "🟢 تشبع بيع"
-        else:
-            rsi_signal = "⚪ حيادي"
+        # إشارات مبسطة
+        last = df.dropna().iloc[-1]
+        trend = "📈 صاعد" if last['EMA_7'] > last['SMA_14'] else "📉 هابط"
+        rsi = last['RSI']
+        rsi_signal = "🔴 تشبع شراء" if rsi > 70 else "🟢 تشبع بيع" if rsi < 30 else "⚪ حيادي"
 
-        # عرض النتائج
-        st.subheader("📊 التحليل الفني")
+        st.subheader("📊 المؤشرات الفنية الأخيرة")
         st.markdown(f"""
-        - السعر الحالي: **${df['price'].iloc[-1]:.2f}**
-        - المتوسط المتحرك EMA 7: **${df['EMA_7'].iloc[-1]:.2f}**
-        - المتوسط المتحرك SMA 14: **${df['SMA_14'].iloc[-1]:.2f}**
-        - الاتجاه العام: **{trend_signal}**
-        - RSI: **{rsi_val:.2f} → {rsi_signal}**
-        - Bollinger Band: **{df['bb_lower'].iloc[-1]:.2f} ~ {df['bb_upper'].iloc[-1]:.2f}**
+        - السعر الحالي: **${last['price']:.2f}**
+        - EMA 7: **${last['EMA_7']:.2f}**
+        - SMA 14: **${last['SMA_14']:.2f}**
+        - الاتجاه العام: **{trend}**
+        - RSI: **{rsi:.2f} → {rsi_signal}**
+        - Bollinger Band: **{last['bb_lower']:.2f} ~ {last['bb_upper']:.2f}**
         """)
 
-        # رسم البيانات
         st.subheader("📈 الرسم البياني")
         fig, ax = plt.subplots(figsize=(12, 5))
         ax.plot(df['ds'], df['price'], label='السعر', color='blue')
