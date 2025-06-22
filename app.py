@@ -3,7 +3,7 @@ import pandas as pd
 import yfinance as yf
 import matplotlib.pyplot as plt
 import ta
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta  # الاستيراد الصحيح للتاريخ
 
 # إعداد صفحة Streamlit
 st.set_page_config(
@@ -57,7 +57,7 @@ with st.sidebar:
         quick_period = st.selectbox("اختر فترة سريعة:", 
                                   ["آخر أسبوع", "آخر شهر", "آخر 3 أشهر", "آخر سنة", "آخر سنتين"])
         
-        end_date = datetime.today()
+        end_date = date.today()
         
         if quick_period == "آخر أسبوع":
             start_date = end_date - timedelta(days=7)
@@ -73,14 +73,14 @@ with st.sidebar:
         # الفترة المخصصة
         start_date = st.date_input(
             "تاريخ البداية",
-            datetime.date(2023, 1, 1),
-            max_value=datetime.date.today() - timedelta(days=1)
+            date(2023, 1, 1),
+            max_value=date.today() - timedelta(days=1)
         )
         end_date = st.date_input(
             "تاريخ النهاية",
-            datetime.date.today(),
+            date.today(),
             min_value=start_date + timedelta(days=1),
-            max_value=datetime.date.today()
+            max_value=date.today()
         )
 
 # الواجهة الرئيسية
