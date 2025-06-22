@@ -18,37 +18,34 @@ if st.button("🚀 تنفيذ التحليل"):
         # تحميل البيانات
         df = yf.download(ticker, start=start, end=end)[["Close"]].dropna().reset_index()
         df.rename(columns={"Date": "ds", "Close": "price"}, inplace=True)
-        
-        # تحويل السعر إلى Series 1D
-        price_series = df["price"].squeeze()
-        
+
         # حساب المؤشرات الفنية
-        df["EMA_7"] = price_series.ewm(span=7).mean()
-        df["SMA_14"] = price_series.rolling(window=14).mean()
-        df["RSI"] = ta.momentum.RSIIndicator(close=price_series).rsi()
-        bb = ta.volatility.BollingerBands(close=price_series)
+        df["EMA_7"] = df["price"].ewm(span=7).mean()
+        df["SMA_14"] = df["price"].rolling(window=14).mean()
+        df["RSI"] = ta.momentum.RSIIndicator(close=df["price"]).rsi()
+        bb = ta.volatility.BollingerBands(close=df["price"])
         df["bb_upper"] = bb.bollinger_hband()
         df["bb_lower"] = bb.bollinger_lband()
 
         df = df.dropna()
         latest = df.iloc[-1]
 
-        # إشارات فنية (معالجة المشكلة باستخدام .item())
-        ema_value = latest["EMA_7"].item() if pd.notna(latest["EMA_7"]) else 0
-        sma_value = latest["SMA_14"].item() if pd.notna(latest["SMA_14"]) else 0
-        trend = "📈 صاعد" if ema_value > sma_value else "📉 هابط"
+        # إشارات فنية (معالجة المشكلة باستخدام .iloc[0] أو القيم مباشرة)
+        ema_value = latest["EMA_7"]
+        sma_value = latest["SMA_14"]
+        trend = "📈 صاعد" if float(ema_value) > float(sma_value) else "📉 هابط"
         
-        rsi_value = latest["RSI"].item() if pd.notna(latest["RSI"]) else 50
-        rsi_signal = "🔴 تشبع شراء" if rsi_value > 70 else "🟢 تشبع بيع" if rsi_value < 30 else "⚪ حيادي"
+        rsi_value = latest["RSI"]
+        rsi_signal = "🔴 تشبع شراء" if float(rsi_value) > 70 else "🟢 تشبع بيع" if float(rsi_value) < 30 else "⚪ حيادي"
 
         # عرض النتائج
         st.subheader("📊 المؤشرات الفنية الأخيرة")
         st.markdown(f"""
-        - السعر الحالي: **${latest['price'].item():.2f}**
-        - EMA 7: **${ema_value:.2f}**
-        - SMA 14: **${sma_value:.2f}**
-        - RSI: **{rsi_value:.2f} → {rsi_signal}**
-        - Bollinger Band: **{latest['bb_lower'].item():.2f} ~ {latest['bb_upper'].item():.2f}**
+        - السعر الحالي: **${float(latest['price']):.2f}**
+        - EMA 7: **${float(ema_value):.2f}**
+        - SMA 14: **${float(sma_value):.2f}**
+        - RSI: **{float(rsi_value):.2f} → {rsi_signal}**
+        - Bollinger Band: **{float(latest['bb_lower']):.2f} ~ {float(latest['bb_upper']):.2f}**
         - الاتجاه العام: **{trend}**
         """)
 
