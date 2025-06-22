@@ -18,11 +18,11 @@ if st.button("🚀 تنفيذ التحليل"):
         # تحميل البيانات
         df = yf.download(ticker, start=start, end=end)[["Close"]].dropna().reset_index()
         df.rename(columns={"Date": "ds", "Close": "price"}, inplace=True)
-
-        # تحويل السعر إلى Series 1D بشكل صحيح
-        price_series = df["price"].squeeze()  # هذه هي الطريقة الصحيحة لتحويل البيانات إلى 1D
         
-        # حساب المؤشرات الفنية باستخدام السلسلة أحادية البعد
+        # تحويل السعر إلى Series 1D
+        price_series = df["price"].squeeze()
+        
+        # حساب المؤشرات الفنية
         df["EMA_7"] = price_series.ewm(span=7).mean()
         df["SMA_14"] = price_series.rolling(window=14).mean()
         df["RSI"] = ta.momentum.RSIIndicator(close=price_series).rsi()
@@ -33,19 +33,22 @@ if st.button("🚀 تنفيذ التحليل"):
         df = df.dropna()
         latest = df.iloc[-1]
 
-        # إشارات فنية
-        trend = "📈 صاعد" if latest["EMA_7"] > latest["SMA_14"] else "📉 هابط"
-        rsi_value = latest["RSI"]
+        # إشارات فنية (معالجة المشكلة باستخدام .item())
+        ema_value = latest["EMA_7"].item() if pd.notna(latest["EMA_7"]) else 0
+        sma_value = latest["SMA_14"].item() if pd.notna(latest["SMA_14"]) else 0
+        trend = "📈 صاعد" if ema_value > sma_value else "📉 هابط"
+        
+        rsi_value = latest["RSI"].item() if pd.notna(latest["RSI"]) else 50
         rsi_signal = "🔴 تشبع شراء" if rsi_value > 70 else "🟢 تشبع بيع" if rsi_value < 30 else "⚪ حيادي"
 
         # عرض النتائج
         st.subheader("📊 المؤشرات الفنية الأخيرة")
         st.markdown(f"""
-        - السعر الحالي: **${latest['price']:.2f}**
-        - EMA 7: **${latest['EMA_7']:.2f}**
-        - SMA 14: **${latest['SMA_14']:.2f}**
+        - السعر الحالي: **${latest['price'].item():.2f}**
+        - EMA 7: **${ema_value:.2f}**
+        - SMA 14: **${sma_value:.2f}**
         - RSI: **{rsi_value:.2f} → {rsi_signal}**
-        - Bollinger Band: **{latest['bb_lower']:.2f} ~ {latest['bb_upper']:.2f}**
+        - Bollinger Band: **{latest['bb_lower'].item():.2f} ~ {latest['bb_upper'].item():.2f}**
         - الاتجاه العام: **{trend}**
         """)
 
