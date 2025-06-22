@@ -4,7 +4,6 @@ import yfinance as yf
 import matplotlib.pyplot as plt
 import ta
 
-# إعداد الواجهة
 st.set_page_config(page_title="📈 تحليل السعر الفني", layout="wide")
 st.title("📊 تحليل فني للعملات الرقمية")
 
@@ -20,10 +19,11 @@ if st.button("🚀 تنفيذ التحليل"):
         df = yf.download(ticker, start=start, end=end)[["Close"]].dropna().reset_index()
         df.rename(columns={"Date": "ds", "Close": "price"}, inplace=True)
 
-        # تحويل السعر إلى Series 1D دائمًا
+        # تحويل السعر إلى Series 1D بشكل صريح ونهائي
         df["price"] = df["price"].astype(float)
+        df["price"] = pd.Series(df["price"].values.reshape(-1))
 
-        # المؤشرات الفنية باستخدام Series فقط
+        # المؤشرات الفنية (تمرير فقط Series 1D)
         df["EMA_7"] = df["price"].ewm(span=7).mean()
         df["SMA_14"] = df["price"].rolling(window=14).mean()
         df["RSI"] = ta.momentum.RSIIndicator(close=df["price"]).rsi()
@@ -37,14 +37,9 @@ if st.button("🚀 تنفيذ التحليل"):
         # إشارات فنية
         trend = "📈 صاعد" if latest["EMA_7"] > latest["SMA_14"] else "📉 هابط"
         rsi_value = latest["RSI"]
-        if rsi_value > 70:
-            rsi_signal = "🔴 تشبع شراء"
-        elif rsi_value < 30:
-            rsi_signal = "🟢 تشبع بيع"
-        else:
-            rsi_signal = "⚪ حيادي"
+        rsi_signal = "🔴 تشبع شراء" if rsi_value > 70 else "🟢 تشبع بيع" if rsi_value < 30 else "⚪ حيادي"
 
-        # عرض المؤشرات
+        # عرض النتائج
         st.subheader("📊 المؤشرات الفنية الأخيرة")
         st.markdown(f"""
         - السعر الحالي: **${latest['price']:.2f}**
@@ -55,7 +50,7 @@ if st.button("🚀 تنفيذ التحليل"):
         - الاتجاه العام: **{trend}**
         """)
 
-        # الرسم البياني
+        # رسم المؤشرات
         st.subheader("📈 الرسم البياني")
         fig, ax = plt.subplots(figsize=(12, 5))
         ax.plot(df["ds"], df["price"], label="السعر", color="blue")
