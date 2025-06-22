@@ -4,5 +4,5 @@ yfinance
 matplotlib
 numpy
 ta
-statsmodels
 prophet
+pystan>=2.19.1.1
