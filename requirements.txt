@@ -9,3 +9,5 @@ nltk
 TextBlob
 fpdf
 datetime
+prophet
+textblob
