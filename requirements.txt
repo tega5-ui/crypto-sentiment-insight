@@ -1,8 +1,6 @@
 streamlit
+pandas
 yfinance
 matplotlib
-statsmodels
-pmdarima
-ta
-pandas
 numpy
+ta
