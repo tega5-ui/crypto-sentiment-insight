@@ -31,16 +31,24 @@ if st.button("🚀 شغّل التنبؤ"):
         future = model.make_future_dataframe(periods=forecast_days)
         forecast = model.predict(future)
 
-        # معالجة yhat لضمان كونها Series 1D
+        # معالجة yhat كـ 1D Series
         forecast['yhat'] = forecast['yhat'].squeeze()
 
-        # جدول التوقعات القادمة
+        # جدول التوقعات
+        future_forecast = forecast[['ds', 'yhat']].tail(forecast_days).copy()
         latest_price = df['y'].iloc[-1]
-        future_forecast = forecast[['ds', 'yhat']].tail(forecast_days)
-        future_forecast['المقارنة الحالية'] = ['📈 أعلى' if float(x) > latest_price else '📉 أقل' for x in future_forecast['yhat']]
+
+        # دالة مقارنة آمنة ومستقرة
+        def مقارنة_السعر(yhat, current):
+            try:
+                return "📈 أعلى" if yhat > current else "📉 أقل"
+            except:
+                return "⚠️"
+
+        future_forecast['المقارنة الحالية'] = future_forecast['yhat'].apply(lambda x: مقارنة_السعر(x, latest_price))
         future_forecast.rename(columns={'ds': 'التاريخ', 'yhat': 'السعر المتوقع'}, inplace=True)
 
-        # عرض التوقع
+        # رسم التوقعات
         st.subheader("📊 رسم التوقعات")
         fig1 = model.plot(forecast)
         st.pyplot(fig1)
