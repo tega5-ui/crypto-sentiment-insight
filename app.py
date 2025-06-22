@@ -19,15 +19,14 @@ if st.button("🚀 تنفيذ التحليل"):
         df = yf.download(ticker, start=start, end=end)[["Close"]].dropna().reset_index()
         df.rename(columns={"Date": "ds", "Close": "price"}, inplace=True)
 
-        # تحويل السعر إلى Series 1D بشكل صريح ونهائي
-        df["price"] = df["price"].astype(float)
-        df["price"] = pd.Series(df["price"].values.reshape(-1))
-
-        # المؤشرات الفنية (تمرير فقط Series 1D)
-        df["EMA_7"] = df["price"].ewm(span=7).mean()
-        df["SMA_14"] = df["price"].rolling(window=14).mean()
-        df["RSI"] = ta.momentum.RSIIndicator(close=df["price"]).rsi()
-        bb = ta.volatility.BollingerBands(close=df["price"])
+        # تحويل السعر إلى Series 1D بشكل صحيح
+        price_series = df["price"].squeeze()  # هذه هي الطريقة الصحيحة لتحويل البيانات إلى 1D
+        
+        # حساب المؤشرات الفنية باستخدام السلسلة أحادية البعد
+        df["EMA_7"] = price_series.ewm(span=7).mean()
+        df["SMA_14"] = price_series.rolling(window=14).mean()
+        df["RSI"] = ta.momentum.RSIIndicator(close=price_series).rsi()
+        bb = ta.volatility.BollingerBands(close=price_series)
         df["bb_upper"] = bb.bollinger_hband()
         df["bb_lower"] = bb.bollinger_lband()
 
