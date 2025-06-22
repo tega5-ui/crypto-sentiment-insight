@@ -18,33 +18,41 @@ if st.button("🚀 تنفيذ التحليل"):
         # تحميل البيانات
         df = yf.download(ticker, start=start, end=end)[["Close"]].dropna().reset_index()
         df.rename(columns={"Date": "ds", "Close": "price"}, inplace=True)
-
-        # حساب المؤشرات الفنية
-        df["EMA_7"] = df["price"].ewm(span=7).mean()
-        df["SMA_14"] = df["price"].rolling(window=14).mean()
-        df["RSI"] = ta.momentum.RSIIndicator(close=df["price"]).rsi()
-        bb = ta.volatility.BollingerBands(close=df["price"])
-        df["bb_upper"] = bb.bollinger_hband()
-        df["bb_lower"] = bb.bollinger_lband()
+        
+        # التحويل الصحيح إلى سلسلة أحادية البعد
+        price_series = df["price"].values.flatten()  # أو .squeeze()
+        
+        # حساب المؤشرات الفنية باستخدام السلسلة 1D
+        df["EMA_7"] = pd.Series(price_series).ewm(span=7).mean().values
+        df["SMA_14"] = pd.Series(price_series).rolling(window=14).mean().values
+        
+        # حساب RSI مع التحقق من الأبعاد
+        rsi_calculator = ta.momentum.RSIIndicator(close=pd.Series(price_series))
+        df["RSI"] = rsi_calculator.rsi().values
+        
+        # حساب Bollinger Bands
+        bb = ta.volatility.BollingerBands(close=pd.Series(price_series))
+        df["bb_upper"] = bb.bollinger_hband().values
+        df["bb_lower"] = bb.bollinger_lband().values
 
         df = df.dropna()
         latest = df.iloc[-1]
 
-        # إشارات فنية (معالجة المشكلة باستخدام .iloc[0] أو القيم مباشرة)
-        ema_value = latest["EMA_7"]
-        sma_value = latest["SMA_14"]
-        trend = "📈 صاعد" if float(ema_value) > float(sma_value) else "📉 هابط"
+        # إشارات فنية (باستخدام القيم الفردية)
+        ema_val = float(latest["EMA_7"])
+        sma_val = float(latest["SMA_14"])
+        trend = "📈 صاعد" if ema_val > sma_val else "📉 هابط"
         
-        rsi_value = latest["RSI"]
-        rsi_signal = "🔴 تشبع شراء" if float(rsi_value) > 70 else "🟢 تشبع بيع" if float(rsi_value) < 30 else "⚪ حيادي"
+        rsi_val = float(latest["RSI"])
+        rsi_signal = "🔴 تشبع شراء" if rsi_val > 70 else "🟢 تشبع بيع" if rsi_val < 30 else "⚪ حيادي"
 
         # عرض النتائج
         st.subheader("📊 المؤشرات الفنية الأخيرة")
         st.markdown(f"""
         - السعر الحالي: **${float(latest['price']):.2f}**
-        - EMA 7: **${float(ema_value):.2f}**
-        - SMA 14: **${float(sma_value):.2f}**
-        - RSI: **{float(rsi_value):.2f} → {rsi_signal}**
+        - EMA 7: **${ema_val:.2f}**
+        - SMA 14: **${sma_val:.2f}**
+        - RSI: **{rsi_val:.2f} → {rsi_signal}**
         - Bollinger Band: **{float(latest['bb_lower']):.2f} ~ {float(latest['bb_upper']):.2f}**
         - الاتجاه العام: **{trend}**
         """)
