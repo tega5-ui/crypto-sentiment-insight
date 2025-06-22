@@ -6,5 +6,3 @@ pmdarima
 ta
 pandas
 numpy
-prophet==1.1.5
-pystan==2.19.1.1
