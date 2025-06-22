@@ -6,3 +6,4 @@ numpy
 ta
 statsmodels
 nltk
+TextBlob
