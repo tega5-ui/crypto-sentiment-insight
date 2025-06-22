@@ -11,3 +11,4 @@ fpdf
 datetime
 prophet
 textblob
+requests
