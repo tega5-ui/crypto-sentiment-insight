@@ -1,8 +1,8 @@
 streamlit
-pandas
 yfinance
 matplotlib
-numpy
+statsmodels
+pmdarima
 ta
-prophet==1.1.5
-pystan==2.19.1.1
+pandas
+numpy
