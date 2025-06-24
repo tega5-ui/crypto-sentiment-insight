@@ -48,13 +48,16 @@ if st.button("🚀 تحليل الآن"):
 
     df["EMA_7"] = df["price"].ewm(span=7).mean()
     df["EMA_14"] = df["price"].ewm(span=14).mean()
-    rsi_series = pd.Series(df["price"].values, index=df.index)
-    df["RSI"] = ta.momentum.RSIIndicator(close=rsi_series).rsi()
-    bb = ta.volatility.BollingerBands(close=rsi_series)
+    df["RSI"] = ta.momentum.RSIIndicator(close=df["price"]).rsi()
+    bb = ta.volatility.BollingerBands(close=df["price"])
     df["BB_upper"] = bb.bollinger_hband()
     df["BB_lower"] = bb.bollinger_lband()
 
     df.dropna(inplace=True)
+    if df.empty:
+        st.warning("🚫 البيانات غير كافية بعد التحليل الفني.")
+        st.stop()
+
     latest = df.iloc[-1]
 
     # إشارات الدخول
@@ -97,7 +100,6 @@ if st.button("🚀 تحليل الآن"):
     fig.add_trace(go.Scatter(x=df["Date"], y=df["BB_upper"], name="Bollinger Upper", line=dict(dash="dot", color="gray")))
     fig.add_trace(go.Scatter(x=df["Date"], y=df["BB_lower"], name="Bollinger Lower", line=dict(dash="dot", color="gray")))
 
-    # سهم دخول
     entries = df[df["Entry"] == 1]
     fig.add_trace(go.Scatter(
         x=entries["Date"], y=entries["price"],
