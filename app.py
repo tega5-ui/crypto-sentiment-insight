@@ -48,8 +48,9 @@ if st.button("🚀 تحليل الآن"):
 
     df["EMA_7"] = df["price"].ewm(span=7).mean()
     df["EMA_14"] = df["price"].ewm(span=14).mean()
-    df["RSI"] = ta.momentum.RSIIndicator(close=df["price"]).rsi()
-    bb = ta.volatility.BollingerBands(close=df["price"])
+    rsi_series = pd.Series(df["price"].values, index=df.index)
+    df["RSI"] = ta.momentum.RSIIndicator(close=rsi_series).rsi()
+    bb = ta.volatility.BollingerBands(close=rsi_series)
     df["BB_upper"] = bb.bollinger_hband()
     df["BB_lower"] = bb.bollinger_lband()
 
@@ -87,7 +88,7 @@ if st.button("🚀 تحليل الآن"):
     else:
         st.info("⏸ لا توجد إشارات دخول قوية حاليًا.")
 
-    # رسم تفاعلي
+    # رسم تفاعلي مع إشارات دخول
     st.subheader("📈 الرسم البياني التفاعلي")
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=df["Date"], y=df["price"], name="السعر", line=dict(color="blue")))
