@@ -12,3 +12,4 @@ datetime
 prophet
 textblob
 requests
+plotly
