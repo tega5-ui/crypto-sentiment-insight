@@ -1,105 +1,108 @@
 import streamlit as st
 import pandas as pd
+import yfinance as yf
+import plotly.graph_objects as go
+import ta
 import requests
 import datetime
-import matplotlib.pyplot as plt
-import ta
 
-st.set_page_config(page_title="📈 تحليل لحظي من Binance", layout="wide")
-st.title("💹 تحليل فني لحظي + مناطق دخول من Binance")
+st.set_page_config(page_title="📈 التحليل الفني مع إشارات الدخول", layout="wide")
+st.title("💹 نظام التحليل الفني - بيانات مباشرة + إشارات دخول")
 
-# 🧠 إعدادات المستخدم
-symbols = {
-    "BTC/USDT": "BTCUSDT",
-    "ETH/USDT": "ETHUSDT",
-    "BNB/USDT": "BNBUSDT",
-    "SOL/USDT": "SOLUSDT"
+# خريطة الرموز لـ CoinGecko
+symbol_map = {
+    "BTC-USD": "bitcoin",
+    "ETH-USD": "ethereum",
+    "BNB-USD": "binancecoin",
+    "SOL-USD": "solana",
+    "ADA-USD": "cardano"
 }
-symbol_name = st.selectbox("🪙 اختر العملة:", list(symbols.keys()))
-binance_symbol = symbols[symbol_name]
-interval = st.selectbox("⏱️ الإطار الزمني:", ["1m", "5m", "15m", "1h"], index=0)
-limit = st.slider("📊 عدد الشموع:", 50, 1000, 200)
 
-# 🛰️ جلب بيانات Binance
-def get_binance_ohlcv(symbol, interval="1m", limit=200):
-    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
+tickers = list(symbol_map.keys())
+ticker = st.selectbox("🪙 اختر العملة:", tickers, index=0)
+symbol_id = symbol_map[ticker]
+
+# التاريخ
+start_date = st.date_input("📅 تاريخ البداية", datetime.date(2023, 1, 1))
+end_date = st.date_input("📅 تاريخ النهاية", datetime.date.today())
+
+# السعر اللحظي
+def get_price(symbol="bitcoin"):
+    url = f"https://api.coingecko.com/api/v3/simple/price?ids={symbol}&vs_currencies=usd"
     try:
-        r = requests.get(url)
-        data = r.json()
-        df = pd.DataFrame(data, columns=[
-            "timestamp", "open", "high", "low", "close", "volume",
-            "close_time", "quote_asset_volume", "number_of_trades",
-            "taker_buy_base", "taker_buy_quote", "ignore"
-        ])
-        df["ds"] = pd.to_datetime(df["timestamp"], unit="ms")
-        df["price"] = df["close"].astype(float)
-        return df[["ds", "price"]].copy()
-    except Exception as e:
-        st.error(f"خطأ أثناء جلب البيانات من Binance:\n{str(e)}")
-        return pd.DataFrame()
+        return requests.get(url).json()[symbol]["usd"]
+    except:
+        return None
 
-# 🚀 تنفيذ التحليل
+# التحميل والتحليل
+@st.cache_data
+def get_data(ticker, start, end):
+    df = yf.download(ticker, start=start, end=end)
+    return df[["Close"]].dropna().rename(columns={"Close": "price"}).reset_index()
+
 if st.button("🚀 تحليل الآن"):
-    df = get_binance_ohlcv(binance_symbol, interval, limit)
-
+    df = get_data(ticker, start_date, end_date)
     if df.empty:
-        st.warning("🚫 لا توجد بيانات متاحة من Binance. جرّب عدد شموع أكبر أو رمز مختلف.")
+        st.warning("🚫 لا توجد بيانات!")
         st.stop()
 
-    try:
-        df["EMA_7"] = df["price"].ewm(span=7).mean()
-        df["EMA_14"] = df["price"].ewm(span=14).mean()
-        df["RSI"] = ta.momentum.RSIIndicator(close=df["price"]).rsi()
-        bb = ta.volatility.BollingerBands(close=df["price"])
-        df["BB_upper"] = bb.bollinger_hband()
-        df["BB_lower"] = bb.bollinger_lband()
+    df["EMA_7"] = df["price"].ewm(span=7).mean()
+    df["EMA_14"] = df["price"].ewm(span=14).mean()
+    df["RSI"] = ta.momentum.RSIIndicator(close=df["price"]).rsi()
+    bb = ta.volatility.BollingerBands(close=df["price"])
+    df["BB_upper"] = bb.bollinger_hband()
+    df["BB_lower"] = bb.bollinger_lband()
 
-        df = df.dropna()
+    df.dropna(inplace=True)
+    latest = df.iloc[-1]
 
-        if df.empty:
-            st.warning("🚫 لا توجد بيانات كافية بعد التحليل الفني. جرّب عدد شموع أكبر أو إطار زمني أطول.")
-            st.stop()
+    # إشارات الدخول
+    entry_points = df[(df["RSI"] < 30) & (df["EMA_7"] > df["EMA_14"])]
+    df["Entry"] = 0
+    df.loc[entry_points.index, "Entry"] = 1
 
-        latest = df.iloc[-1]
+    # السعر اللحظي
+    live_price = get_price(symbol_id)
+    st.subheader("💲 السعر اللحظي")
+    if live_price:
+        st.metric("السعر من CoinGecko", f"${live_price:,.2f}")
+    else:
+        st.warning("⚠️ تعذر جلب السعر اللحظي.")
 
-        # 📍 مناطق دخول
-        st.subheader("📍 مناطق دخول محتملة")
-        entry_signals = []
+    # عرض المؤشرات
+    st.subheader("📊 المؤشرات الفنية")
+    st.markdown(f"""
+    - السعر الأخير: **${latest['price']:.2f}**
+    - EMA 7: **${latest['EMA_7']:.2f}**
+    - EMA 14: **${latest['EMA_14']:.2f}**
+    - RSI: **{latest['RSI']:.2f}**
+    - Bollinger Band: **{latest['BB_lower']:.2f} ~ {latest['BB_upper']:.2f}**
+    """)
 
-        if latest["RSI"] < 30 and latest["EMA_7"] > latest["EMA_14"]:
-            entry_signals.append(f"✅ دخول فني محتمل عند السعر: ${latest['price']:.2f} (RSI منخفض و EMA 7 > EMA 14)")
+    # مناطق الدخول
+    st.subheader("📍 إشارات دخول مكتشفة")
+    if not entry_points.empty:
+        for idx, row in entry_points.iterrows():
+            st.success(f"✅ دخول محتمل يوم {row['Date'].date()} عند ${row['price']:.2f}")
+    else:
+        st.info("⏸ لا توجد إشارات دخول قوية حاليًا.")
 
-        if latest["price"] < latest["BB_lower"]:
-            entry_signals.append(f"📉 السعر تحت الحد الأدنى لبولينجر — دخول محتمل عند: ${latest['price']:.2f}")
+    # رسم تفاعلي
+    st.subheader("📈 الرسم البياني التفاعلي")
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=df["Date"], y=df["price"], name="السعر", line=dict(color="blue")))
+    fig.add_trace(go.Scatter(x=df["Date"], y=df["EMA_7"], name="EMA 7", line=dict(color="orange")))
+    fig.add_trace(go.Scatter(x=df["Date"], y=df["EMA_14"], name="EMA 14", line=dict(color="green")))
+    fig.add_trace(go.Scatter(x=df["Date"], y=df["BB_upper"], name="Bollinger Upper", line=dict(dash="dot", color="gray")))
+    fig.add_trace(go.Scatter(x=df["Date"], y=df["BB_lower"], name="Bollinger Lower", line=dict(dash="dot", color="gray")))
 
-        if not entry_signals:
-            st.info("⏸ لا توجد إشارات دخول قوية في اللحظة الحالية.")
-        else:
-            for signal in entry_signals:
-                st.success(signal)
+    # سهم دخول
+    entries = df[df["Entry"] == 1]
+    fig.add_trace(go.Scatter(
+        x=entries["Date"], y=entries["price"],
+        mode="markers",
+        marker=dict(symbol="arrow-up", size=12, color="lime"),
+        name="📍 دخول"))
 
-        # 📊 عرض المؤشرات الفنية
-        st.subheader("📊 المؤشرات الفنية الأخيرة")
-        st.markdown(f"""
-        - السعر الحالي: **${latest['price']:.2f}**
-        - EMA 7: **${latest['EMA_7']:.2f}**
-        - EMA 14: **${latest['EMA_14']:.2f}**
-        - RSI: **{latest['RSI']:.2f}**
-        - Bollinger Band: **{latest['BB_lower']:.2f} ~ {latest['BB_upper']:.2f}**
-        """)
-
-        # 📈 الرسم البياني
-        st.subheader("📈 الرسم البياني")
-        fig, ax = plt.subplots(figsize=(14, 6))
-        ax.plot(df["ds"], df["price"], label="السعر", color="blue")
-        ax.plot(df["ds"], df["EMA_7"], label="EMA 7", linestyle="--", color="orange")
-        ax.plot(df["ds"], df["EMA_14"], label="EMA 14", linestyle="--", color="green")
-        ax.plot(df["ds"], df["BB_upper"], label="Bollinger Upper", linestyle=":", color="gray")
-        ax.plot(df["ds"], df["BB_lower"], label="Bollinger Lower", linestyle=":", color="gray")
-        ax.legend()
-        ax.set_xlabel("الوقت")
-        ax.set_ylabel("السعر")
-        st.pyplot(fig)
-
-    except Exception as e:
-        st.error(f"⚠️ حدث خطأ أثناء التحليل:\n\n{str(e)}")
+    fig.update_layout(height=600, xaxis_title="التاريخ", yaxis_title="السعر (USD)", template="plotly_white")
+    st.plotly_chart(fig, use_container_width=True)
